@@ -1,6 +1,6 @@
 # pi-tdd
 
-`pi-tdd` is a TDD phase gate for [Pi](https://pi.dev), the terminal coding agent by Mario Zechner. It keeps an agent inside a deliberate `SPEC -> RED -> GREEN -> REFACTOR` loop instead of letting it drift straight into broad implementation.
+`pi-tdd` is a TDD phase gate for [Pi](https://pi.dev/), the terminal coding agent by Mario Zechner. It keeps an agent inside a deliberate `SPEC -> RED -> GREEN -> REFACTOR` loop instead of letting it drift straight into broad implementation.
 
 The extension injects phase-specific instructions into the agent prompt, judges tool calls against the current phase, watches test runs, and persists TDD state across the session.
 
