@@ -2,7 +2,7 @@
 
 `pi-tdd` is a TDD phase gate for [Pi](https://pi.dev/), the terminal coding agent by Mario Zechner. It keeps an agent inside a deliberate `SPEC -> RED -> GREEN -> REFACTOR` loop instead of letting it drift straight into broad implementation.
 
-The extension injects phase-specific instructions into the agent prompt, judges tool calls against the current phase, watches test runs, and persists TDD state across the session.
+The extension injects phase-specific instructions into the agent prompt, gates tool calls against the current phase, runs LLM-backed pre-flight and post-flight reviews at cycle boundaries, watches test runs, and persists TDD state across the session.
 
 In a hurry? Jump to [Quick Start](#quick-start).
 
@@ -167,10 +167,10 @@ Use `SPEC` when the request needs to be sharpened into something testable. Skip 
 ## What The Extension Does
 
 - Adds a `/tdd` command inside Pi.
-- Registers `tdd_engage` and `tdd_disengage` tools the agent can call directly.
+- Registers `tdd_engage`, `tdd_disengage`, `tdd_preflight`, and `tdd_postflight` tools the agent can call directly.
 - Tracks the current phase: `SPEC`, `RED`, `GREEN`, or `REFACTOR`.
 - Injects phase-specific system prompt guidance on every turn (only while engaged).
-- Uses an LLM judge to approve or block phase-sensitive tool calls.
+- Gates phase-sensitive tool calls and runs LLM-backed reviews at cycle boundaries: a **pre-flight** check on the spec checklist before entering `RED`, and a **post-flight** check on the delivered work before disengaging.
 - Detects common test commands such as `npm test`, `pnpm test`, `pytest`, `cargo test`, `go test`, `vitest`, `jest`, and `rspec`.
 - Auto-advances from `RED -> GREEN` after a failing test signal and from `GREEN -> REFACTOR` after a passing test signal.
 - Persists phase state in the Pi session so the cycle survives within-session navigation.
@@ -196,18 +196,22 @@ Important behavior details:
 - `/tdd spec-set "Criterion 1" "Criterion 2"`: store the feature spec checklist
 - `/tdd spec-show`: show the active spec checklist
 - `/tdd spec-done`: mark the current spec item complete
+- `/tdd preflight`: run the pre-flight review on the current spec checklist
+- `/tdd postflight`: run the post-flight review on the current cycle
 - `/tdd history`: show phase transitions
 - `/tdd engage` (alias `/tdd on`): engage TDD without changing phase
-- `/tdd disengage` (alias `/tdd off`): disengage TDD for investigation/navigation
+- `/tdd disengage` (alias `/tdd off`): disengage TDD for investigation/navigation (runs post-flight first if eligible)
 
 Legacy `/tdd plan`, `/tdd plan-set`, `/tdd plan-show`, and `/tdd plan-done` aliases still work for compatibility.
 
 ## Agent Tools
 
-The extension registers two LLM-callable tools so the agent can manage TDD on its own:
+The extension registers four LLM-callable tools so the agent can manage TDD on its own:
 
-- `tdd_engage(phase?, reason)`: engage the gate at the start of feature or bug-fix work. `phase` defaults to `SPEC`; pass `RED` if acceptance criteria are already clear enough to write the first failing test.
-- `tdd_disengage(reason)`: disengage when leaving feature work.
+- `tdd_engage(phase?, reason)`: engage the gate at the start of feature or bug-fix work. `phase` defaults to `SPEC`; pass `RED` if acceptance criteria are already clear enough to write the first failing test. Pre-flight runs automatically when entering `RED` and blocks the transition if the spec checklist is weak.
+- `tdd_disengage(reason)`: disengage when leaving feature work. Post-flight runs automatically when there is a spec checklist and a recent passing test run, surfacing any gaps before the gate releases.
+- `tdd_preflight(userStory?)`: run the pre-flight review on the current spec checklist explicitly. Normally not needed — pre-flight fires on its own when transitioning into `RED`.
+- `tdd_postflight(userStory?)`: run the post-flight review on the current cycle explicitly. Normally not needed — post-flight fires on its own when disengaging.
 
 The agent is instructed to call these via the tool's prompt guidelines. You generally do not need to call them yourself — they exist so natural-language workflows can flow without slash-command interruptions.
 
@@ -268,7 +272,8 @@ Useful options:
 - `persistPhase`: keep the phase state in the Pi session history (engagement is intentionally not persisted across sessions; every session starts dormant)
 - `autoTransition`: allow the extension to move phases from observed test signals
 - `refactorTransition`: choose how `REFACTOR -> RED` happens; default is `"user"`
-- `judgeProvider` and `judgeModel`: use a specific model for the gate instead of the current active model
+- `reviewProvider` and `reviewModel`: use a specific model for the pre-flight and post-flight reviews instead of the current active model (legacy `judgeProvider` / `judgeModel` keys are still accepted)
+- `runPreflightOnRed`: if `true` (default), pre-flight runs automatically when transitioning into `RED` and blocks the transition on failure
 - `guidelines`: override the default spec, test, implementation, refactor, universal, and security guidance blocks
 
 Legacy `startInPlanMode` and `guidelines.plan` are still accepted for compatibility, but `startInSpecMode` and `guidelines.spec` are the preferred names.
@@ -301,7 +306,7 @@ Because this repository declares a Pi package manifest, Pi can load it directly 
 This package improves discipline. It does not replace judgment.
 
 - A passing test can still be a weak test.
-- An LLM judge can still make a bad call.
+- An LLM review can still make a bad call.
 - Overrides are sometimes necessary.
 
 The goal is not perfect enforcement. The goal is to make agent behavior more test-driven, more observable, and harder to let drift into unsupported code changes.

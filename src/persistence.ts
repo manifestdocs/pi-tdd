@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
-import type { PersistedTddState, TDDPhase } from "./types.js";
+import type { PhaseState, TDDPhase } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
 
 export const STATE_ENTRY_TYPE = "tdd_state";
@@ -7,14 +7,14 @@ export const STATE_ENTRY_TYPE = "tdd_state";
 type TddStateEntry = SessionEntry & {
   type: "custom";
   customType: typeof STATE_ENTRY_TYPE;
-  data?: PersistedTddState;
+  data?: PhaseState;
 };
 
 export function persistState(pi: ExtensionAPI, machine: PhaseStateMachine): void {
-  pi.appendEntry(STATE_ENTRY_TYPE, machine.getPersistedState());
+  pi.appendEntry(STATE_ENTRY_TYPE, machine.getSnapshot());
 }
 
-export function restoreState(ctx: ExtensionContext): PersistedTddState | null {
+export function restoreState(ctx: ExtensionContext): PhaseState | null {
   const entries = ctx.sessionManager.getBranch();
 
   for (let i = entries.length - 1; i >= 0; i--) {

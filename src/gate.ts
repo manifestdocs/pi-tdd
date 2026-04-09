@@ -1,126 +1,57 @@
 import { isToolCallEventType, type ExtensionContext, type ToolCallEvent, type ToolCallEventResult } from "@mariozechner/pi-coding-agent";
 import type { TDDConfig } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
-import { judgeToolCalls } from "./judge.js";
 import { isTestCommand } from "./transition.js";
 
 const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const BUILTIN_MUTATING_TOOLS = new Set(["write", "edit", "bash"]);
 
-export async function gateToolCalls(
-  events: ToolCallEvent[],
-  machine: PhaseStateMachine,
-  config: TDDConfig,
-  ctx: ExtensionContext
-): Promise<(ToolCallEventResult | undefined)[]> {
-  if (!config.enabled || !machine.enabled) {
-    return events.map(() => undefined);
-  }
-
-  const results: (ToolCallEventResult | undefined)[] = events.map(() => undefined);
-  const gatedIndices: number[] = [];
-  const gatedEvents: ToolCallEvent[] = [];
-
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-
-    if (config.allowReadInAllPhases && READ_ONLY_TOOLS.has(event.toolName)) {
-      continue;
-    }
-
-    if (isToolCallEventType("bash", event) && machine.phase !== "SPEC" && isTestCommand(event.input.command)) {
-      machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
-      continue;
-    }
-
-    if (machine.phase === "SPEC" && BUILTIN_MUTATING_TOOLS.has(event.toolName)) {
-      results[i] = await handlePlanBlock(event, ctx);
-      if (!results[i]) {
-        machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
-      }
-      continue;
-    }
-
-    gatedIndices.push(i);
-    gatedEvents.push(event);
-  }
-
-  if (gatedEvents.length === 0) {
-    return results;
-  }
-
-  let verdicts;
-  try {
-    verdicts = await judgeToolCalls(ctx, gatedEvents, machine.getSnapshot(), config);
-  } catch (error) {
-    const allowed = await confirmFailureFallback(
-      ctx,
-      "TDD judge unavailable",
-      `${error instanceof Error ? error.message : String(error)}\nAllow ${gatedEvents.length} gated tool call(s)?`
-    );
-
-    for (const idx of gatedIndices) {
-      if (allowed) {
-        machine.addDiff(summarizeDiff(events[idx]), config.maxDiffsInContext);
-        results[idx] = undefined;
-      } else {
-        results[idx] = { block: true, reason: "TDD judge unavailable and no override was granted." };
-      }
-    }
-
-    return results;
-  }
-
-  for (let j = 0; j < gatedIndices.length; j++) {
-    const idx = gatedIndices[j];
-    const event = events[idx];
-    const verdict = verdicts[j];
-
-    if (verdict.allowed) {
-      machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
-      continue;
-    }
-
-    if (ctx.hasUI) {
-      ctx.ui.notify(`Blocked ${event.toolName} during ${machine.phase}: ${verdict.reason}`, "warning");
-    }
-
-    const override = await confirmFailureFallback(
-      ctx,
-      `Blocked ${event.toolName}`,
-      `${verdict.reason}\nOverride and allow this tool call?`
-    );
-
-    if (override) {
-      machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
-      continue;
-    }
-
-    results[idx] = { block: true, reason: verdict.reason };
-  }
-
-  return results;
-}
-
+/**
+ * The gate enforces exactly one deterministic rule: SPEC blocks file mutations
+ * (write/edit/bash) so the spec gets finalised before any code lands. In every
+ * other phase the gate is a passthrough that only records diffs into the phase
+ * state for downstream review (preflight/postflight) context.
+ *
+ * There is no per-tool-call LLM judging. The system prompt steers the agent
+ * during the cycle and test signals drive transitions; review LLM calls only
+ * fire at cycle boundaries (preflight before, postflight after) — never during.
+ */
 export async function gateSingleToolCall(
   event: ToolCallEvent,
   machine: PhaseStateMachine,
   config: TDDConfig,
   ctx: ExtensionContext
 ): Promise<ToolCallEventResult | void> {
-  try {
-    const [result] = await gateToolCalls([event], machine, config, ctx);
-    return result;
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    if (ctx.hasUI) {
-      ctx.ui.notify(`TDD gate failed while checking ${event.toolName}: ${reason}`, "warning");
-    }
-    return { block: true, reason: `TDD gate failed safely: ${reason}` };
+  if (!config.enabled || !machine.enabled) {
+    return undefined;
   }
+
+  if (config.allowReadInAllPhases && READ_ONLY_TOOLS.has(event.toolName)) {
+    return undefined;
+  }
+
+  if (isToolCallEventType("bash", event) && machine.phase !== "SPEC" && isTestCommand(event.input.command)) {
+    machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
+    return undefined;
+  }
+
+  if (machine.phase === "SPEC" && BUILTIN_MUTATING_TOOLS.has(event.toolName)) {
+    const blocked = await handleSpecBlock(event, ctx);
+    if (blocked) {
+      return blocked;
+    }
+    machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
+    return undefined;
+  }
+
+  // RED / GREEN / REFACTOR: passthrough. Just record the diff for review
+  // context. The system prompt steers the agent and the test signal drives
+  // phase transitions — no LLM judging here.
+  machine.addDiff(summarizeDiff(event), config.maxDiffsInContext);
+  return undefined;
 }
 
-async function handlePlanBlock(
+async function handleSpecBlock(
   event: ToolCallEvent,
   ctx: ExtensionContext
 ): Promise<ToolCallEventResult | undefined> {
@@ -128,7 +59,7 @@ async function handlePlanBlock(
     ctx.ui.notify(`Blocked ${event.toolName} during SPEC. Finish the feature spec first.`, "warning");
   }
 
-  const override = await confirmFailureFallback(
+  const override = await confirmOverride(
     ctx,
     "SPEC phase is read-only",
     `SPEC blocks ${event.toolName}. Override and allow it anyway?`
@@ -142,7 +73,7 @@ async function handlePlanBlock(
       };
 }
 
-async function confirmFailureFallback(
+async function confirmOverride(
   ctx: ExtensionContext,
   title: string,
   message: string

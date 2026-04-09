@@ -1,7 +1,6 @@
 import { isBashToolResult, type ExtensionContext, type ToolResultEvent } from "@mariozechner/pi-coding-agent";
 import type { TDDConfig, TestSignal } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
-import { judgeTransition } from "./judge.js";
 import { splitCommandArgs } from "./commands.js";
 
 const BARE_TEST_BINARIES = new Set(["pytest", "vitest", "rspec", "jest", "mocha"]);
@@ -63,18 +62,11 @@ export async function evaluateTransition(
     return;
   }
 
-  let verdict = fallbackTransition(machine, signals, expectedNextPhase);
-
-  if (!verdict.transition) {
-    try {
-      verdict = await judgeTransition(ctx, machine.getSnapshot(), config, expectedNextPhase);
-    } catch {
-      return;
-    }
-  }
-
-  // Safety belt: only allow the immediate legal phase transition.
-  if (verdict.transition !== expectedNextPhase) {
+  // Deterministic test-signal-driven transitions only. If signals don't yield
+  // a clear answer, no transition fires — the agent advances explicitly with
+  // /tdd commands or tdd_engage(phase).
+  const verdict = fallbackTransition(machine, signals, expectedNextPhase);
+  if (!verdict.transition || verdict.transition !== expectedNextPhase) {
     return;
   }
 

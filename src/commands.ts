@@ -1,6 +1,9 @@
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionCommandContext, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { TDDConfig, TDDPhase } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
+import { formatPreflightResult, runPreflight } from "./preflight.js";
+import { formatPostflightResult, runPostflight } from "./postflight.js";
+import { maybeRunPostflightOnDisengage } from "./engagement.js";
 
 const VALID_PHASES: TDDPhase[] = ["SPEC", "RED", "GREEN", "REFACTOR"];
 
@@ -11,7 +14,7 @@ export async function handleTddCommand(
   machine: PhaseStateMachine,
   ctx: ExtensionCommandContext,
   publish: Publish,
-  config?: Pick<TDDConfig, "enabled">
+  config?: TDDConfig
 ): Promise<void> {
   const args = splitCommandArgs(rawArgs);
   const sub = (args[0] ?? "status").toLowerCase();
@@ -37,6 +40,33 @@ export async function handleTddCommand(
       if (!VALID_PHASES.includes(target)) {
         publish(`Unknown phase: ${sub}. Valid phases: ${VALID_PHASES.join(", ")}.`);
         return;
+      }
+
+      // Pre-flight is a hard gate when transitioning out of SPEC into RED. The
+      // spec checklist must validate before any code is written; failure blocks
+      // the transition with no override. The agent must refine the spec and
+      // retry. Power users can disable the gate entirely with
+      // `runPreflightOnRed: false`.
+      if (machine.phase === "SPEC" && target === "RED" && config?.runPreflightOnRed) {
+        try {
+          const result = await runPreflight({ spec: machine.plan }, ctx, config);
+          if (!result.ok) {
+            publish(formatPreflightResult(result));
+            ctx.ui.notify(
+              `Pre-flight blocked SPEC → RED: ${result.issues.length} issue(s)`,
+              "warning"
+            );
+            return;
+          }
+          if (ctx.hasUI) {
+            ctx.ui.notify("Pre-flight: OK", "info");
+          }
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          publish(`Pre-flight gate failed to run: ${reason}`);
+          ctx.ui.notify(`Pre-flight gate failed: ${reason}`, "warning");
+          return;
+        }
       }
 
       if (machine.phase === "REFACTOR" && target === "RED" && machine.plan.length > 0) {
@@ -95,12 +125,28 @@ export async function handleTddCommand(
     }
 
     case "off":
-    case "disengage":
+    case "disengage": {
+      // Run post-flight automatically before disengaging via the shared helper.
+      // The helper enforces eligibility (spec set + tests actually passing) and
+      // never blocks disengagement on failure — gaps just get surfaced so the
+      // user/agent can decide whether to re-engage.
+      if (config) {
+        const { summary } = await maybeRunPostflightOnDisengage(
+          machine,
+          ctx as ExtensionContext,
+          config
+        );
+        if (summary) {
+          publish(summary);
+        }
+      }
+
       machine.enabled = false;
       ctx.ui.setStatus("tdd-gate", machine.bottomBarText());
       ctx.ui.notify("TDD disengaged", "info");
       publish("TDD disengaged. Investigation and navigation are unconstrained.");
       return;
+    }
 
     case "on":
     case "engage":
@@ -113,6 +159,56 @@ export async function handleTddCommand(
       ctx.ui.notify("TDD engaged", "info");
       publish(`TDD engaged. Phase: ${machine.phase}.`);
       return;
+
+    case "preflight": {
+      if (configDisabled) {
+        publishDisabled(machine, ctx, publish);
+        return;
+      }
+      if (!config) {
+        publish("Pre-flight requires the full TDD config to access the review model.");
+        return;
+      }
+      const userStory = args.slice(1).join(" ").trim() || undefined;
+      try {
+        const result = await runPreflight({ spec: machine.plan, userStory }, ctx, config);
+        publish(formatPreflightResult(result));
+        ctx.ui.notify(
+          result.ok ? "TDD pre-flight: OK" : `TDD pre-flight: ${result.issues.length} issue(s)`,
+          result.ok ? "info" : "warning"
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        publish(`Pre-flight failed: ${reason}`);
+        ctx.ui.notify(`Pre-flight failed: ${reason}`, "warning");
+      }
+      return;
+    }
+
+    case "postflight": {
+      if (configDisabled) {
+        publishDisabled(machine, ctx, publish);
+        return;
+      }
+      if (!config) {
+        publish("Post-flight requires the full TDD config to access the review model.");
+        return;
+      }
+      const userStory = args.slice(1).join(" ").trim() || undefined;
+      try {
+        const result = await runPostflight({ state: machine.getSnapshot(), userStory }, ctx, config);
+        publish(formatPostflightResult(result));
+        ctx.ui.notify(
+          result.ok ? "TDD post-flight: OK" : `TDD post-flight: ${result.gaps.length} gap(s)`,
+          result.ok ? "info" : "warning"
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        publish(`Post-flight failed: ${reason}`);
+        ctx.ui.notify(`Post-flight failed: ${reason}`, "warning");
+      }
+      return;
+    }
 
     case "history":
       publish(formatHistory(machine));
@@ -239,13 +335,15 @@ export function splitCommandArgs(raw: string): string[] {
 const HELP_TEXT = `Usage: /tdd [subcommand]
 
 /tdd status
-/tdd spec       (engages and switches to SPEC)
-/tdd red        (engages and switches to RED)
-/tdd green      (engages and switches to GREEN)
-/tdd refactor   (engages and switches to REFACTOR)
+/tdd spec        (engages and switches to SPEC)
+/tdd red         (engages and switches to RED)
+/tdd green       (engages and switches to GREEN)
+/tdd refactor    (engages and switches to REFACTOR)
 /tdd spec-set "Criterion 1" "Criterion 2"
 /tdd spec-show
 /tdd spec-done
-/tdd engage     (alias /tdd on)
-/tdd disengage  (alias /tdd off)
+/tdd preflight   (priming: validate the spec before starting RED)
+/tdd postflight  (proving: validate a completed cycle once tests are green)
+/tdd engage      (alias /tdd on)
+/tdd disengage   (alias /tdd off)
 /tdd history`;

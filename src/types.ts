@@ -30,8 +30,8 @@ export interface GuidelinesConfig {
 
 export interface TDDConfig {
   enabled: boolean;
-  judgeModel: string | null;
-  judgeProvider: string | null;
+  reviewModel: string | null;
+  reviewProvider: string | null;
   autoTransition: boolean;
   refactorTransition: "user" | "agent" | "timeout";
   allowReadInAllPhases: boolean;
@@ -47,6 +47,13 @@ export interface TDDConfig {
    */
   defaultEngaged: boolean;
   /**
+   * If true (default), transitioning out of SPEC into RED automatically fires
+   * the preflight check first. If preflight finds issues, the transition is
+   * blocked (or warned, depending on the dialog response) so the spec gets
+   * tightened before the cycle starts.
+   */
+  runPreflightOnRed: boolean;
+  /**
    * Tool names that auto-engage TDD when called. Useful for hooking task or
    * feature management tools (e.g., manifest's start_feature) into the TDD
    * lifecycle without requiring the agent to remember tdd_engage.
@@ -58,27 +65,6 @@ export interface TDDConfig {
    */
   disengageOnTools: string[];
   guidelines: GuidelinesConfig;
-}
-
-export interface JudgeVerdict {
-  allowed: boolean;
-  reason: string;
-}
-
-export interface TransitionVerdict {
-  transition: TDDPhase | null;
-  reason: string;
-}
-
-export interface PersistedTddState {
-  phase: TDDPhase;
-  diffs: string[];
-  lastTestOutput: string | null;
-  lastTestFailed: boolean | null;
-  cycleCount: number;
-  enabled: boolean;
-  plan: string[];
-  planCompleted: number;
 }
 
 export interface TestSignal {

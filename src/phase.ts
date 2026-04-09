@@ -1,4 +1,4 @@
-import type { PersistedTddState, PhaseState, PhaseTransitionLog, TDDPhase } from "./types.js";
+import type { PhaseState, PhaseTransitionLog, TDDPhase } from "./types.js";
 
 const CYCLE_ORDER: TDDPhase[] = ["RED", "GREEN", "REFACTOR"];
 
@@ -64,13 +64,7 @@ export class PhaseStateMachine {
     };
   }
 
-  getPersistedState(): PersistedTddState {
-    return {
-      ...this.getSnapshot(),
-    };
-  }
-
-  restore(state: PersistedTddState): void {
+  restore(state: PhaseState): void {
     this.state = {
       phase: state.phase,
       diffs: [...state.diffs],
@@ -116,10 +110,6 @@ export class PhaseStateMachine {
     this.state.phase = target;
     this.state.diffs = [];
     return true;
-  }
-
-  advance(reason: string): boolean {
-    return this.transitionTo(this.nextPhase(), reason);
   }
 
   setPlan(items: string[]): void {

@@ -12,6 +12,7 @@ import {
   createEngageTool,
   type EngagementDeps,
 } from "./engagement.js";
+import { createPostflightTool, createPreflightTool } from "./review-tools.js";
 import type { TDDConfig, TestSignal } from "./types.js";
 
 const STATUS_KEY = "tdd-gate";
@@ -52,6 +53,8 @@ export default function activate(pi: ExtensionAPI): void {
 
   pi.registerTool(createEngageTool(engagementDeps));
   pi.registerTool(createDisengageTool(engagementDeps));
+  pi.registerTool(createPreflightTool(engagementDeps));
+  pi.registerTool(createPostflightTool(engagementDeps));
 
   function rehydrateState(ctx: ExtensionContext, options: { freshSession: boolean }): void {
     const nextConfig = refreshConfig(ctx);
@@ -133,7 +136,7 @@ export default function activate(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event, ctx) => {
     const nextConfig = refreshConfig(ctx);
-    const lifecycle = applyLifecycleHooks(event.toolName, engagementDeps, ctx);
+    const lifecycle = await applyLifecycleHooks(event.toolName, engagementDeps, ctx);
     if (lifecycle.isControlTool) {
       // tdd_engage / tdd_disengage are control flow, never gated.
       return undefined;
@@ -172,6 +175,8 @@ export default function activate(pi: ExtensionAPI): void {
         "spec-set",
         "spec-show",
         "spec-done",
+        "preflight",
+        "postflight",
         "engage",
         "disengage",
         "off",
@@ -194,11 +199,12 @@ export default function activate(pi: ExtensionAPI): void {
 
 export { PhaseStateMachine } from "./phase.js";
 export { loadConfig } from "./config.js";
-export { judgeToolCalls, judgeTransition } from "./judge.js";
-export { gateSingleToolCall, gateToolCalls } from "./gate.js";
+export { gateSingleToolCall } from "./gate.js";
 export { evaluateTransition, extractTestSignal, isTestCommand } from "./transition.js";
 export { buildSystemPrompt } from "./prompt.js";
 export { handleTddCommand } from "./commands.js";
 export { guidelinesForPhase, resolveGuidelines, DEFAULTS as GUIDELINE_DEFAULTS } from "./guidelines.js";
 export { persistState, restoreState, STATE_ENTRY_TYPE } from "./persistence.js";
+export { runPreflight } from "./preflight.js";
+export { runPostflight } from "./postflight.js";
 export type * from "./types.js";

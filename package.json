@@ -1,7 +1,7 @@
 {
   "name": "pi-tdd",
   "version": "0.1.0",
-  "description": "TDD enforcement gate for pi coding agent — enforces RED/GREEN/REFACTOR cycle via LLM judge",
+  "description": "TDD enforcement gate for pi coding agent — enforces SPEC/RED/GREEN/REFACTOR cycle with pre-flight and post-flight LLM reviews at cycle boundaries",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

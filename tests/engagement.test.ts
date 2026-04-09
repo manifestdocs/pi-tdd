@@ -16,8 +16,8 @@ import type { TDDConfig } from "../src/types.ts";
 function makeConfig(overrides: Partial<TDDConfig> = {}): TDDConfig {
   return {
     enabled: true,
-    judgeModel: null,
-    judgeProvider: null,
+    reviewModel: null,
+    reviewProvider: null,
     autoTransition: true,
     refactorTransition: "user",
     allowReadInAllPhases: true,
@@ -26,6 +26,7 @@ function makeConfig(overrides: Partial<TDDConfig> = {}): TDDConfig {
     persistPhase: false,
     startInSpecMode: false,
     defaultEngaged: false,
+    runPreflightOnRed: true,
     engageOnTools: [],
     disengageOnTools: [],
     guidelines: resolveGuidelines({}),
@@ -74,9 +75,9 @@ describe("PhaseStateMachine defaults", () => {
 });
 
 describe("applyLifecycleHooks", () => {
-  it("treats tdd_engage as a control tool", () => {
+  it("treats tdd_engage as a control tool", async () => {
     const machine = new PhaseStateMachine();
-    const result = applyLifecycleHooks(
+    const result = await applyLifecycleHooks(
       ENGAGE_TOOL_NAME,
       makeDeps(machine, makeConfig()),
       makeContext()
@@ -85,9 +86,9 @@ describe("applyLifecycleHooks", () => {
     expect(machine.enabled).toBe(false);
   });
 
-  it("treats tdd_disengage as a control tool", () => {
+  it("treats tdd_disengage as a control tool", async () => {
     const machine = new PhaseStateMachine({ enabled: true });
-    const result = applyLifecycleHooks(
+    const result = await applyLifecycleHooks(
       DISENGAGE_TOOL_NAME,
       makeDeps(machine, makeConfig()),
       makeContext()
@@ -96,10 +97,10 @@ describe("applyLifecycleHooks", () => {
     expect(machine.enabled).toBe(true);
   });
 
-  it("engages TDD when a configured engageOnTools tool is called", () => {
+  it("engages TDD when a configured engageOnTools tool is called", async () => {
     const machine = new PhaseStateMachine();
     const config = makeConfig({ engageOnTools: ["mcp__manifest__start_feature"] });
-    const result = applyLifecycleHooks(
+    const result = await applyLifecycleHooks(
       "mcp__manifest__start_feature",
       makeDeps(machine, config),
       makeContext()
@@ -109,20 +110,23 @@ describe("applyLifecycleHooks", () => {
     expect(machine.phase).toBe("RED");
   });
 
-  it("uses SPEC when startInSpecMode is true", () => {
+  it("uses SPEC when startInSpecMode is true", async () => {
     const machine = new PhaseStateMachine();
     const config = makeConfig({
       engageOnTools: ["start_feature"],
       startInSpecMode: true,
     });
-    applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
+    await applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
     expect(machine.phase).toBe("SPEC");
   });
 
-  it("disengages TDD when a configured disengageOnTools tool is called", () => {
+  it("disengages TDD when a configured disengageOnTools tool is called", async () => {
+    // No spec set + lastTestFailed=null, so postflight is NOT eligible and the
+    // helper short-circuits without touching the LLM. This test stays a pure
+    // unit test of the lifecycle hook itself.
     const machine = new PhaseStateMachine({ enabled: true, phase: "GREEN" });
     const config = makeConfig({ disengageOnTools: ["mcp__manifest__complete_feature"] });
-    const result = applyLifecycleHooks(
+    const result = await applyLifecycleHooks(
       "mcp__manifest__complete_feature",
       makeDeps(machine, config),
       makeContext()
@@ -131,30 +135,30 @@ describe("applyLifecycleHooks", () => {
     expect(machine.enabled).toBe(false);
   });
 
-  it("is a no-op for tools not in any hook list", () => {
+  it("is a no-op for tools not in any hook list", async () => {
     const machine = new PhaseStateMachine();
-    const result = applyLifecycleHooks("bash", makeDeps(machine, makeConfig()), makeContext());
+    const result = await applyLifecycleHooks("bash", makeDeps(machine, makeConfig()), makeContext());
     expect(result.isControlTool).toBe(false);
     expect(result.engaged).toBeUndefined();
     expect(result.disengaged).toBeUndefined();
     expect(machine.enabled).toBe(false);
   });
 
-  it("does not re-engage when machine is already engaged", () => {
+  it("does not re-engage when machine is already engaged", async () => {
     const machine = new PhaseStateMachine({ enabled: true, phase: "REFACTOR" });
     const config = makeConfig({ engageOnTools: ["start_feature"] });
-    const result = applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
+    const result = await applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
     expect(result.engaged).toBeUndefined();
     expect(machine.phase).toBe("REFACTOR");
   });
 
-  it("does not auto-engage when config disables TDD", () => {
+  it("does not auto-engage when config disables TDD", async () => {
     const machine = new PhaseStateMachine();
     const config = makeConfig({
       enabled: false,
       engageOnTools: ["start_feature"],
     });
-    const result = applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
+    const result = await applyLifecycleHooks("start_feature", makeDeps(machine, config), makeContext());
     expect(result.engaged).toBeUndefined();
     expect(machine.enabled).toBe(false);
   });
@@ -253,7 +257,7 @@ describe("/tdd phase commands engage when dormant", () => {
     const machine = new PhaseStateMachine();
     const publish = vi.fn();
 
-    await handleTddCommand("red", machine, makeContext(), publish, { enabled: false });
+    await handleTddCommand("red", machine, makeContext(), publish, makeConfig({ enabled: false }));
 
     expect(machine.enabled).toBe(false);
     expect(machine.phase).toBe("RED");

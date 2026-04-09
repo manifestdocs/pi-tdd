@@ -6,8 +6,8 @@ import { resolveGuidelines } from "./guidelines.js";
 
 const DEFAULTS: Omit<TDDConfig, "guidelines"> = {
   enabled: true,
-  judgeModel: null,
-  judgeProvider: null,
+  reviewModel: null,
+  reviewProvider: null,
   autoTransition: true,
   refactorTransition: "user",
   allowReadInAllPhases: true,
@@ -16,12 +16,17 @@ const DEFAULTS: Omit<TDDConfig, "guidelines"> = {
   persistPhase: true,
   startInSpecMode: false,
   defaultEngaged: false,
+  runPreflightOnRed: true,
   engageOnTools: [],
   disengageOnTools: [],
 };
 
 type UserConfig = Partial<Omit<TDDConfig, "guidelines">> & {
   startInPlanMode?: boolean;
+  /** Deprecated alias for reviewProvider. */
+  judgeProvider?: string | null;
+  /** Deprecated alias for reviewModel. */
+  judgeModel?: string | null;
   guidelines?: Partial<GuidelinesConfig> & { plan?: string | null };
 };
 
@@ -67,9 +72,13 @@ export function loadConfig(cwd: string): TDDConfig {
   const user = mergeConfigLayers(globalSettings?.tddGate, projectSettings?.tddGate);
   const guidelines = resolveGuidelines(user.guidelines);
   const startInSpecMode = user.startInSpecMode ?? user.startInPlanMode;
+  const reviewProvider = user.reviewProvider ?? user.judgeProvider;
+  const reviewModel = user.reviewModel ?? user.judgeModel;
   const {
     guidelines: _ignoredGuidelines,
     startInPlanMode: _ignoredStartInPlanMode,
+    judgeProvider: _ignoredJudgeProvider,
+    judgeModel: _ignoredJudgeModel,
     ...rest
   } = user;
 
@@ -77,6 +86,8 @@ export function loadConfig(cwd: string): TDDConfig {
     ...DEFAULTS,
     ...(rest as Partial<TDDConfig>),
     startInSpecMode: startInSpecMode ?? DEFAULTS.startInSpecMode,
+    reviewProvider: reviewProvider ?? DEFAULTS.reviewProvider,
+    reviewModel: reviewModel ?? DEFAULTS.reviewModel,
     guidelines,
   };
 }
