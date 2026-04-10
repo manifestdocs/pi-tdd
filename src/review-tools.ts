@@ -30,7 +30,7 @@ export function createPreflightTool(
     name: PREFLIGHT_TOOL_NAME,
     label: "TDD Pre-flight",
     description:
-      "Run the TDD pre-flight check (priming the cycle). Validates the spec checklist is solid enough to drive a clean RED → GREEN → REFACTOR cycle BEFORE any tests or implementation are written. Call this when leaving SPEC for RED if you want to verify the spec is testable, atomic, and covers the user story.",
+      "Run the TDD pre-flight check (priming the cycle). Validates the spec checklist is solid enough to drive a clean RED → GREEN → REFACTOR cycle BEFORE any tests or implementation are written. Call this when leaving SPEC for RED if you want to verify the spec is testable, atomic, covers the user story, and points toward the right proof level such as unit or integration tests.",
     promptSnippet: PREFLIGHT_PROMPT_SNIPPET,
     promptGuidelines: PREFLIGHT_PROMPT_GUIDELINES,
     parameters: Type.Object({
@@ -76,7 +76,7 @@ export function createPostflightTool(
     name: POSTFLIGHT_TOOL_NAME,
     label: "TDD Post-flight",
     description:
-      "Run the TDD post-flight review (proving the cycle). Validates that the completed TDD cycle delivered what the spec asked for: every spec item has a passing test, the implementation matches the behavior the spec describes, and there are no obvious gaps or feature creep. Call this when tests are green and you believe the cycle is complete.",
+      "Run the TDD post-flight review (proving the cycle). Validates that the completed TDD cycle delivered what the spec asked for, that the implementation matches the behavior the spec describes, that the proof is at the right level for the behavior, and that there are no clear project-fit mismatches unless the user request or spec justifies them. Call this when tests are green and you believe the cycle is complete.",
     promptSnippet: POSTFLIGHT_PROMPT_SNIPPET,
     promptGuidelines: POSTFLIGHT_PROMPT_GUIDELINES,
     parameters: Type.Object({

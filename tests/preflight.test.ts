@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPreflightUserPrompt,
   formatPreflightResult,
   parsePreflightResponse,
   runPreflight,
@@ -99,6 +100,18 @@ describe("runPreflight early-return paths", () => {
     if (!result.ok) {
       expect(result.issues.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("buildPreflightUserPrompt", () => {
+  it("asks the reviewer to reason about unit versus integration proof", () => {
+    const prompt = buildPreflightUserPrompt({
+      userStory: "save settings through the HTTP API",
+      spec: ["persists a valid settings update"],
+    });
+
+    expect(prompt).toContain("unit test, an integration test, or both");
+    expect(prompt).toContain("Boundary-heavy behavior should usually be provable with integration-level tests");
   });
 });
 

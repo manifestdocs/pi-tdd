@@ -16,4 +16,9 @@ describe("resolveGuidelines", () => {
     const guidelines = resolveGuidelines({});
     expect(guidelines.spec).toBe(DEFAULTS.spec);
   });
+
+  it("does not inject security guidance by default", () => {
+    const guidelines = resolveGuidelines({});
+    expect(guidelines.security).toBeNull();
+  });
 });

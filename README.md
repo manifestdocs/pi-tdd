@@ -116,6 +116,8 @@ TDD means:
 4. Refactor without changing behavior.
 5. Repeat.
 
+That test does not have to be a unit test. Use the cheapest test that can actually prove the next behavior. For isolated domain logic, that is often a unit test. For boundaries such as persistence, HTTP contracts, CLI wiring, serialization, or interactions between components, the first honest RED test is often an integration test.
+
 The point is not ceremony. The point is to make progress measurable. Instead of saying "the code looks done," you have a failing test, then a passing test, then a cleanup step.
 
 Before that loop starts, you need to be explicit about the feature itself:
@@ -155,7 +157,7 @@ The intended flow is:
 
 1. State the user story clearly.
 2. Capture the acceptance criteria in observable terms.
-3. Translate those criteria into test cases.
+3. Translate those criteria into test cases and decide whether each one needs unit proof, integration proof, or both.
 4. Move into `RED` and implement one criterion at a time.
 
 That mapping matters. If the specified tests do not come from the user story and acceptance criteria, the loop becomes expensive theater. The agent may still produce red tests, green tests, and refactors, but it is not converging on the right feature.
@@ -222,6 +224,7 @@ For people new to both Pi and TDD, this is the simplest usable loop:
 1. Start by writing down the user story and the acceptance criteria.
 2. Use `SPEC` when needed to turn the request and acceptance criteria into concrete test cases.
 3. Move to `RED` and ask the agent to write one failing test for one acceptance criterion.
+   Pick the right proof level: unit for isolated logic, integration when the behavior crosses a boundary or contract.
 4. Run the test and confirm it fails for the expected reason.
 5. Let the agent make the smallest possible code change.
 6. Run the test again and confirm it passes.
@@ -274,7 +277,7 @@ Useful options:
 - `refactorTransition`: choose how `REFACTOR -> RED` happens; default is `"user"`
 - `reviewProvider` and `reviewModel`: use a specific model for the pre-flight and post-flight reviews instead of the current active model (legacy `judgeProvider` / `judgeModel` keys are still accepted)
 - `runPreflightOnRed`: if `true` (default), pre-flight runs automatically when transitioning into `RED` and blocks the transition on failure
-- `guidelines`: override the default spec, test, implementation, refactor, universal, and security guidance blocks
+- `guidelines`: override or supply custom spec, test, implementation, refactor, universal, and security guidance blocks. The built-in defaults stay focused on TDD workflow; broader coding preferences should come from the repository's instructions (for example `AGENTS.md`) or your own system prompt.
 
 Legacy `startInPlanMode` and `guidelines.plan` are still accepted for compatibility, but `startInSpecMode` and `guidelines.spec` are the preferred names.
 

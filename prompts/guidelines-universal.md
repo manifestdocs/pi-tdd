@@ -1,4 +1,5 @@
-General guidelines:
-- Show your work: explain key decisions and non-obvious choices.
-- Ask questions: clarify ambiguous requirements before proceeding.
-- Implement only what's asked: no extra features or future-proofing unless requested.
+General TDD guidelines:
+- Clarify ambiguous behavior before entering RED.
+- Keep the spec checklist tied to user-visible behavior and acceptance criteria.
+- Treat passing tests as success only when they prove the requested behavior.
+- Use the repository's own instructions, such as `AGENTS.md` or the active system prompt, for broader coding conventions.

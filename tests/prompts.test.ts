@@ -9,11 +9,9 @@ import { buildSystemPrompt } from "../src/system-prompt.ts";
 import { resolveGuidelines } from "../src/guidelines.ts";
 
 const GREEN_IMPLEMENTATION_GUIDANCE =
-  "Write the smallest correct implementation to pass the failing test.";
-const GREEN_NO_GOLD_PLATING_GUIDANCE =
-  "Correctness comes first, but no gold-plating, refactors, or side quests — save polish and abstractions for REFACTOR.";
-const GREEN_DEPENDENCY_GUIDANCE =
-  "Don't reinvent the wheel: use the standard library when it already provides the best-practice solution, otherwise use established libraries when they apply common patterns or known solutions well.";
+  "Write the smallest correct implementation to pass the current failing unit or integration test.";
+const GREEN_SCOPE_GUIDANCE =
+  "Stay scoped to the current failing test. Save cleanup and broader changes for REFACTOR.";
 
 describe("prompts", () => {
   it("loads every declared prompt file", () => {
@@ -106,12 +104,59 @@ describe("prompts", () => {
 
     expect(machine.allowedActions()).toContain(GREEN_IMPLEMENTATION_GUIDANCE);
     expect(prompt).toContain("Write the smallest correct implementation for the behavior the failing test asserts.");
-    expect(prompt).toContain(GREEN_NO_GOLD_PLATING_GUIDANCE);
+    expect(prompt).toContain(GREEN_SCOPE_GUIDANCE);
     expect(skill).toContain("- Write the smallest correct code for the behavior the failing test asserts.");
-    expect(skill).toContain("- Correctness comes first, but no gold-plating, refactors, or unrelated cleanup — save polish and abstractions for REFACTOR.");
+    expect(skill).toContain(`- ${GREEN_SCOPE_GUIDANCE}`);
   });
 
-  it("keeps dependency guidance aligned with the green prompt markdown", () => {
-    expect(loadPrompt("guidelines-green")).toContain(GREEN_DEPENDENCY_GUIDANCE);
+  it("keeps the built-in prompt markdown focused on TDD workflow instead of coding style", () => {
+    expect(loadPrompt("guidelines-green")).toContain("Implement only the behavior required to make the current failing test pass.");
+    expect(loadPrompt("guidelines-red")).toContain("Use unit tests for isolated logic and integration tests for boundaries, contracts, or wiring.");
+    expect(loadPrompt("guidelines-spec")).toContain("unit test, an integration test, or both");
+    expect(loadPrompt("guidelines-green")).not.toContain("Favor pure functions");
+    expect(loadPrompt("guidelines-green")).not.toContain("Functions: 25-30 lines max");
+    expect(loadPrompt("guidelines-refactor")).not.toContain("Unix philosophy");
+    expect(loadPrompt("guidelines-universal")).toContain("AGENTS.md");
+  });
+
+  it("does not inject repository-author coding-style guidance into the system prompt", () => {
+    const machine = new PhaseStateMachine({ enabled: true, phase: "REFACTOR" });
+    const prompt = buildSystemPrompt(machine, {
+      enabled: true,
+      reviewModel: null,
+      reviewProvider: null,
+      autoTransition: true,
+      refactorTransition: "user",
+      allowReadInAllPhases: true,
+      temperature: 0,
+      maxDiffsInContext: 5,
+      persistPhase: false,
+      startInSpecMode: false,
+      defaultEngaged: false,
+      runPreflightOnRed: true,
+      engageOnTools: [],
+      disengageOnTools: [],
+      guidelines: resolveGuidelines({}),
+    });
+
+    expect(prompt).not.toContain("coding guidelines");
+    expect(prompt).toContain("Refine the code from this cycle without changing behavior");
+  });
+
+  it("keeps the postflight prompt focused on spec delivery and project fit", () => {
+    const postflight = loadPrompt("postflight-system");
+
+    expect(postflight).toContain("delivered what its spec asked for and fits the project it was added to");
+    expect(postflight).toContain("The proving tests are at the right level for the behavior");
+    expect(postflight).toContain("repository's documented instructions, established code patterns, or chosen tech stack");
+    expect(postflight).toContain("not justified by the user request or the spec");
+    expect(postflight).not.toContain("NOT to police whether the implementation was minimal");
+  });
+
+  it("teaches preflight to reason about proof level", () => {
+    const preflight = loadPrompt("preflight-system");
+
+    expect(preflight).toContain("whether unit proof, integration proof, or both are needed");
+    expect(preflight).toContain("Boundary-heavy items should usually be provable with integration tests");
   });
 });

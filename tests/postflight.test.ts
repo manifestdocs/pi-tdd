@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPostflightUserPrompt,
   formatPostflightResult,
   parsePostflightResponse,
   runPostflight,
@@ -82,6 +83,24 @@ describe("runPostflight early-return paths", () => {
     if (!result.ok) {
       expect(result.gaps.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("buildPostflightUserPrompt", () => {
+  it("includes recent test history with proof levels", () => {
+    const machine = new PhaseStateMachine({ enabled: true, phase: "REFACTOR" });
+    machine.recordTestResult("1 failed", true, "npm run test:unit", "unit");
+    machine.recordTestResult("1 passed", false, "npm run test:integration", "integration");
+
+    const prompt = buildPostflightUserPrompt({
+      state: machine.getSnapshot(),
+      userStory: "persist settings through the HTTP API",
+    });
+
+    expect(prompt).toContain("Recent test runs captured in this cycle:");
+    expect(prompt).toContain("FAIL | UNIT | npm run test:unit");
+    expect(prompt).toContain("PASS | INTEGRATION | npm run test:integration");
+    expect(prompt).toContain("right level");
   });
 });
 

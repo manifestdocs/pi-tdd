@@ -1,5 +1,5 @@
 import { isBashToolResult, type ExtensionContext, type ToolResultEvent } from "@mariozechner/pi-coding-agent";
-import type { TDDConfig, TestSignal } from "./types.js";
+import type { TDDConfig, TestProofLevel, TestSignal } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
 import { splitCommandArgs } from "./commands.js";
 
@@ -22,6 +22,21 @@ const PASS_OUTPUT_PATTERNS = [
   /\btest result:\s*ok\b/i,
   /\b[1-9]\d*\s+passed\b/i,
 ];
+const INTEGRATION_PROOF_HINTS = [
+  "integration",
+  "e2e",
+  "end-to-end",
+  "end_to_end",
+  "contract",
+  "api",
+  "component",
+  "playwright",
+  "cypress",
+  "browser",
+  "system",
+  "smoke",
+] as const;
+const UNIT_PROOF_HINTS = ["unit"] as const;
 
 type CommandOperator = "&&" | "||" | ";" | "|" | null;
 
@@ -58,6 +73,7 @@ export function extractTestSignal(event: ToolResultEvent): TestSignal | null {
     command,
     output,
     failed,
+    level: inferTestProofLevel(command),
   };
 }
 
@@ -72,7 +88,7 @@ export async function evaluateTransition(
   }
 
   for (const signal of signals) {
-    machine.recordTestResult(signal.output, signal.failed);
+    machine.recordTestResult(signal.output, signal.failed, signal.command, signal.level);
   }
 
   if (!config.autoTransition) {
@@ -230,6 +246,17 @@ function isTestCommandClause(clause: string): boolean {
   }
 
   return looksLikeTestScript(firstRaw);
+}
+
+export function inferTestProofLevel(command: string): TestProofLevel {
+  const normalized = command.toLowerCase();
+  if (INTEGRATION_PROOF_HINTS.some((hint) => normalized.includes(hint))) {
+    return "integration";
+  }
+  if (UNIT_PROOF_HINTS.some((hint) => normalized.includes(hint))) {
+    return "unit";
+  }
+  return "unknown";
 }
 
 function looksLikeTestScript(token: string): boolean {

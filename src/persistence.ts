@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@mariozechner/pi-coding-agent";
-import type { PhaseState, TDDPhase } from "./types.js";
+import type { PhaseState, TDDPhase, TestProofLevel, TestSignal } from "./types.js";
 import type { PhaseStateMachine } from "./phase.js";
 
 export const STATE_ENTRY_TYPE = "tdd_state";
@@ -34,6 +34,7 @@ export function restoreState(ctx: ExtensionContext): PhaseState | null {
       diffs: Array.isArray(state.diffs) ? state.diffs : [],
       lastTestOutput: typeof state.lastTestOutput === "string" ? state.lastTestOutput : null,
       lastTestFailed: typeof state.lastTestFailed === "boolean" ? state.lastTestFailed : null,
+      recentTests: normalizeRecentTests(state.recentTests),
       cycleCount: typeof state.cycleCount === "number" ? state.cycleCount : 0,
       enabled: typeof state.enabled === "boolean" ? state.enabled : true,
       plan: Array.isArray(state.plan) ? state.plan : [],
@@ -48,4 +49,40 @@ function normalizePhase(phase: unknown): TDDPhase | null {
   if (phase === "PLAN" || phase === "SPEC") return "SPEC";
   if (phase === "RED" || phase === "GREEN" || phase === "REFACTOR") return phase;
   return null;
+}
+
+function normalizeRecentTests(value: unknown): TestSignal[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry): TestSignal | null => {
+      if (typeof entry !== "object" || entry === null) {
+        return null;
+      }
+
+      const test = entry as Record<string, unknown>;
+      if (
+        typeof test.command !== "string" ||
+        typeof test.output !== "string" ||
+        typeof test.failed !== "boolean"
+      ) {
+        return null;
+      }
+
+      return {
+        command: test.command,
+        output: test.output,
+        failed: test.failed,
+        level: normalizeProofLevel(test.level),
+      };
+    })
+    .filter((entry): entry is TestSignal => entry !== null);
+}
+
+function normalizeProofLevel(value: unknown): TestProofLevel {
+  return value === "unit" || value === "integration" || value === "unknown"
+    ? value
+    : "unknown";
 }

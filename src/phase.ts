@@ -1,6 +1,7 @@
-import type { PhaseState, PhaseTransitionLog, TDDPhase } from "./types.js";
+import type { PhaseState, PhaseTransitionLog, TDDPhase, TestProofLevel, TestSignal } from "./types.js";
 
 const CYCLE_ORDER: TDDPhase[] = ["RED", "GREEN", "REFACTOR"];
+const MAX_RECENT_TESTS = 6;
 
 export class PhaseStateMachine {
   // "plan" is the persisted historical field name for the SPEC checklist.
@@ -13,6 +14,7 @@ export class PhaseStateMachine {
       diffs: initial?.diffs ?? [],
       lastTestOutput: initial?.lastTestOutput ?? null,
       lastTestFailed: initial?.lastTestFailed ?? null,
+      recentTests: initial?.recentTests ?? [],
       cycleCount: initial?.cycleCount ?? 0,
       enabled: initial?.enabled ?? false,
       plan: initial?.plan ?? [],
@@ -48,6 +50,10 @@ export class PhaseStateMachine {
     return this.state.diffs;
   }
 
+  get recentTests(): TestSignal[] {
+    return this.state.recentTests;
+  }
+
   get plan(): string[] {
     return this.state.plan;
   }
@@ -60,6 +66,7 @@ export class PhaseStateMachine {
     return {
       ...this.state,
       diffs: [...this.state.diffs],
+      recentTests: [...this.state.recentTests],
       plan: [...this.state.plan],
     };
   }
@@ -70,6 +77,7 @@ export class PhaseStateMachine {
       diffs: [...state.diffs],
       lastTestOutput: state.lastTestOutput,
       lastTestFailed: state.lastTestFailed,
+      recentTests: [...state.recentTests],
       cycleCount: state.cycleCount,
       enabled: state.enabled,
       plan: [...state.plan],
@@ -103,12 +111,19 @@ export class PhaseStateMachine {
 
     this.history.push(log);
 
+    const startingNewRedCycle = target === "RED" && this.state.phase !== "RED";
+
     if (this.state.phase === "REFACTOR" && target === "RED") {
       this.state.cycleCount++;
     }
 
     this.state.phase = target;
     this.state.diffs = [];
+    if (startingNewRedCycle) {
+      this.state.lastTestOutput = null;
+      this.state.lastTestFailed = null;
+      this.state.recentTests = [];
+    }
     return true;
   }
 
@@ -138,21 +153,30 @@ export class PhaseStateMachine {
     }
   }
 
-  recordTestResult(output: string, failed: boolean): void {
+  recordTestResult(
+    output: string,
+    failed: boolean,
+    command = "(unknown test command)",
+    level: TestProofLevel = "unknown"
+  ): void {
     this.state.lastTestOutput = output;
     this.state.lastTestFailed = failed;
+    this.state.recentTests.push({ command, output, failed, level });
+    if (this.state.recentTests.length > MAX_RECENT_TESTS) {
+      this.state.recentTests = this.state.recentTests.slice(-MAX_RECENT_TESTS);
+    }
   }
 
   allowedActions(): string {
     switch (this.state.phase) {
       case "SPEC":
-        return "Read code. Clarify the user's request. Translate it into user-visible behavior, acceptance criteria, and testable specifications. Discuss the spec.";
+        return "Read code. Clarify the user's request. Translate it into user-visible behavior, acceptance criteria, and testable specifications. Decide whether each item needs unit proof, integration proof, or both. Discuss the spec.";
       case "RED":
-        return "Write or modify tests. Run tests to confirm failure. Read any file.";
+        return "Write or modify unit or integration tests. Run tests to confirm failure. Read any file.";
       case "GREEN":
-        return "Write the smallest correct implementation to pass the failing test. Run tests.";
+        return "Write the smallest correct implementation to pass the current failing unit or integration test. Run tests.";
       case "REFACTOR":
-        return "Restructure, rename, extract. Run tests to confirm behavior stays the same.";
+        return "Restructure, rename, extract. Run the relevant unit or integration tests to confirm behavior stays the same.";
     }
   }
 

@@ -1,5 +1,5 @@
 import type { GuidelinesConfig, TDDPhase } from "./types.js";
-import { loadPrompt } from "./prompts.js";
+import { loadPrompt } from "./prompt-loader.js";
 
 // ---------------------------------------------------------------------------
 // Default guidelines — the built-in way of working, overridable via config.
@@ -12,7 +12,7 @@ export const DEFAULTS: Readonly<GuidelinesConfig> = {
   green: loadPrompt("guidelines-green"),
   refactor: loadPrompt("guidelines-refactor"),
   universal: loadPrompt("guidelines-universal"),
-  security: loadPrompt("guidelines-security"),
+  security: null,
 };
 
 // ---------------------------------------------------------------------------

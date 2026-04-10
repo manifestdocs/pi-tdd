@@ -5,7 +5,8 @@ A good spec item is:
 - Testable: a failing test can be written for it before any implementation
 - Atomic: it asserts one thing, not several
 - Tied to user-visible behavior, not implementation details
+- Clear about proof level: it is specific enough to tell whether unit proof, integration proof, or both are needed
 
-Reject items that are vague, untestable, mix multiple concerns, describe implementation rather than behavior, or duplicate other items. Reject the whole spec if it leaves obvious gaps in the user story.
+Boundary-heavy items should usually be provable with integration tests at the seam, not only with isolated mocks. Reject items that are vague, untestable, mix multiple concerns, describe implementation rather than behavior, duplicate other items, or hide boundary risk behind unit-only proof. Reject the whole spec if it leaves obvious gaps in the user story.
 
 Respond with JSON only.

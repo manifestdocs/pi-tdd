@@ -1,10 +1,19 @@
 export type TDDPhase = "SPEC" | "RED" | "GREEN" | "REFACTOR";
+export type TestProofLevel = "unit" | "integration" | "unknown";
+
+export interface TestSignal {
+  command: string;
+  output: string;
+  failed: boolean;
+  level: TestProofLevel;
+}
 
 export interface PhaseState {
   phase: TDDPhase;
   diffs: string[];
   lastTestOutput: string | null;
   lastTestFailed: boolean | null;
+  recentTests: TestSignal[];
   cycleCount: number;
   enabled: boolean;
   plan: string[];
@@ -65,10 +74,4 @@ export interface TDDConfig {
    */
   disengageOnTools: string[];
   guidelines: GuidelinesConfig;
-}
-
-export interface TestSignal {
-  command: string;
-  output: string;
-  failed: boolean;
 }

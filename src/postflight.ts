@@ -1,14 +1,15 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { PhaseState, TDDConfig } from "./types.js";
-import { loadPrompt } from "./prompts.js";
+import { loadPrompt } from "./prompt-loader.js";
 import { extractJSON, runReview } from "./reviews.js";
 
 /**
  * Postflight (proving the cycle) — runs after the TDD cycle is complete with
  * passing tests. Validates that the work delivered against the spec: every
- * acceptance criterion has a corresponding test, every test passes, and the
- * implementation actually solves what the spec asked for without obvious
- * feature creep or gaps.
+ * acceptance criterion has a corresponding test, every test passes, the
+ * implementation actually solves what the spec asked for, and the change fits
+ * the surrounding project unless the user request or spec justifies something
+ * new.
  *
  * Auto-triggered on every disengage path (tdd_disengage tool, /tdd disengage
  * command, and disengageOnTools lifecycle hooks) when there is real evidence
@@ -36,7 +37,7 @@ export type PostflightResult =
 
 const SYSTEM_PROMPT = loadPrompt("postflight-system");
 
-function buildUserPrompt(input: PostflightInput): string {
+export function buildPostflightUserPrompt(input: PostflightInput): string {
   const { state, userStory } = input;
   const lines: string[] = [];
 
@@ -65,6 +66,21 @@ function buildUserPrompt(input: PostflightInput): string {
     lines.push("Last test output (truncated):");
     lines.push(truncateFromEnd(state.lastTestOutput, 1500));
   }
+  lines.push("");
+
+  lines.push("Recent test runs captured in this cycle:");
+  if (state.recentTests.length === 0) {
+    lines.push("(no test runs were captured in this cycle)");
+  } else {
+    state.recentTests.forEach((test, index) => {
+      lines.push(
+        `${index + 1}. ${test.failed ? "FAIL" : "PASS"} | ${formatProofLevel(test.level)} | ${test.command}`
+      );
+    });
+  }
+  lines.push("");
+  lines.push("Use this history to decide whether the completed work was proven at the right level.");
+  lines.push("Unit tests are appropriate for isolated logic; integration tests matter when the behavior crosses boundaries, contracts, or wiring.");
   lines.push("");
 
   if (state.diffs.length > 0) {
@@ -101,7 +117,7 @@ export async function runPostflight(
     {
       label: "postflight",
       systemPrompt: SYSTEM_PROMPT,
-      userPrompt: buildUserPrompt(input),
+      userPrompt: buildPostflightUserPrompt(input),
     },
     ctx,
     config
@@ -169,4 +185,15 @@ export function formatPostflightResult(result: PostflightResult): string {
 
 function truncateFromEnd(value: string, max: number): string {
   return value.length > max ? `...${value.slice(-max)}` : value;
+}
+
+function formatProofLevel(level: PhaseState["recentTests"][number]["level"]): string {
+  switch (level) {
+    case "unit":
+      return "UNIT";
+    case "integration":
+      return "INTEGRATION";
+    default:
+      return "UNKNOWN";
+  }
 }

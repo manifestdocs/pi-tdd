@@ -16,7 +16,7 @@
   "scripts": {
     "build": "npm run clean && tsc",
     "test": "vitest run",
-    "test:dist-prompts": "npm run build && node -e \"import('./dist/prompts.js').then(({ loadPrompt, loadPromptList }) => { const snippet = loadPrompt('tool-preflight-snippet'); const guidelines = loadPromptList('tool-preflight-guidelines'); if (snippet !== 'Inspect the pre-flight verdict on the current spec.') throw new Error('dist prompt snippet mismatch'); if (guidelines.length !== 3) throw new Error('dist prompt guideline count mismatch'); console.log('dist prompts ok'); })\"",
+    "test:dist-prompts": "npm run build && node -e \"import('./dist/prompt-loader.js').then(({ loadPrompt, loadPromptList }) => { const snippet = loadPrompt('tool-preflight-snippet'); const guidelines = loadPromptList('tool-preflight-guidelines'); if (snippet !== 'Inspect the pre-flight verdict on the current spec.') throw new Error('dist prompt snippet mismatch'); if (guidelines.length !== 3) throw new Error('dist prompt guideline count mismatch'); console.log('dist prompts ok'); })\"",
     "prepack": "npm run build",
     "pi:install": "npm run build && pi install -l .",
     "pi:install:global": "npm run build && pi install .",

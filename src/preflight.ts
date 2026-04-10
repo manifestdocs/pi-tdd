@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { TDDConfig, TDDPhase } from "./types.js";
-import { loadPrompt } from "./prompts.js";
+import { loadPrompt } from "./prompt-loader.js";
 import { extractJSON, runReview } from "./reviews.js";
 
 /**
@@ -39,7 +39,7 @@ export function shouldRunPreflightOnRedEntry(
 
 const SYSTEM_PROMPT = loadPrompt("preflight-system");
 
-function buildUserPrompt(input: PreflightInput): string {
+export function buildPreflightUserPrompt(input: PreflightInput): string {
   const lines: string[] = [];
   if (input.userStory && input.userStory.trim().length > 0) {
     lines.push("User story / request:");
@@ -56,6 +56,9 @@ function buildUserPrompt(input: PreflightInput): string {
     });
   }
 
+  lines.push("");
+  lines.push("For each spec item, consider whether the best first proof should be a unit test, an integration test, or both.");
+  lines.push("Boundary-heavy behavior should usually be provable with integration-level tests, not only isolated mocks.");
   lines.push("");
   lines.push("Decide whether this spec is ready to start a TDD cycle.");
   lines.push("");
@@ -87,7 +90,7 @@ export async function runPreflight(
     {
       label: "preflight",
       systemPrompt: SYSTEM_PROMPT,
-      userPrompt: buildUserPrompt(input),
+      userPrompt: buildPreflightUserPrompt(input),
     },
     ctx,
     config

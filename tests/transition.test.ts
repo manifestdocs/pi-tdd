@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackTransition, evaluateTransition, extractTestSignal, isTestCommand } from "../src/transition.ts";
+import { fallbackTransition, evaluateTransition, extractTestSignal, inferTestProofLevel, isTestCommand } from "../src/transition.ts";
 import { PhaseStateMachine } from "../src/phase.ts";
 import { resolveGuidelines } from "../src/guidelines.ts";
 import type { TDDConfig } from "../src/types.ts";
@@ -73,6 +73,7 @@ describe("extractTestSignal", () => {
       command: "npm run test",
       output: "1 failed",
       failed: true,
+      level: "unknown",
     });
   });
 
@@ -99,6 +100,7 @@ describe("extractTestSignal", () => {
       command: "npm test || true",
       output: "1 failed",
       failed: true,
+      level: "unknown",
     });
   });
 
@@ -114,7 +116,23 @@ describe("extractTestSignal", () => {
       command: "npm test || true",
       output: "1 passed",
       failed: false,
+      level: "unknown",
     });
+  });
+});
+
+describe("inferTestProofLevel", () => {
+  it("classifies unit test commands", () => {
+    expect(inferTestProofLevel("npm run test:unit")).toBe("unit");
+  });
+
+  it("classifies integration-style test commands", () => {
+    expect(inferTestProofLevel("pnpm run test:integration")).toBe("integration");
+    expect(inferTestProofLevel("bun run test:e2e")).toBe("integration");
+  });
+
+  it("returns unknown when the command does not signal proof level", () => {
+    expect(inferTestProofLevel("npm test")).toBe("unknown");
   });
 });
 
@@ -123,7 +141,7 @@ describe("fallbackTransition", () => {
     const machine = new PhaseStateMachine({ phase: "RED" });
     const verdict = fallbackTransition(
       machine,
-      [{ command: "npm test", output: "1 failed", failed: true }],
+      [{ command: "npm test", output: "1 failed", failed: true, level: "unknown" }],
       machine.nextPhase()
     );
 
@@ -134,7 +152,7 @@ describe("fallbackTransition", () => {
     const machine = new PhaseStateMachine({ phase: "GREEN" });
     const verdict = fallbackTransition(
       machine,
-      [{ command: "npm test", output: "1 passed", failed: false }],
+      [{ command: "npm test", output: "1 passed", failed: false, level: "unknown" }],
       machine.nextPhase()
     );
 
@@ -147,7 +165,7 @@ describe("evaluateTransition", () => {
     const machine = new PhaseStateMachine({ enabled: true, phase: "GREEN" });
 
     await evaluateTransition(
-      [{ command: "npm test", output: "1 passed", failed: false }],
+      [{ command: "npm test", output: "1 passed", failed: false, level: "unknown" }],
       machine,
       makeConfig({ autoTransition: false }),
       makeContext()
@@ -156,5 +174,8 @@ describe("evaluateTransition", () => {
     expect(machine.phase).toBe("GREEN");
     expect(machine.lastTestFailed).toBe(false);
     expect(machine.lastTestOutput).toBe("1 passed");
+    expect(machine.getSnapshot().recentTests).toEqual([
+      { command: "npm test", output: "1 passed", failed: false, level: "unknown" },
+    ]);
   });
 });

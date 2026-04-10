@@ -3,7 +3,7 @@ import { PhaseStateMachine } from "./phase.js";
 import { loadConfig } from "./config.js";
 import { gateSingleToolCall } from "./gate.js";
 import { evaluateTransition, extractTestSignal } from "./transition.js";
-import { buildSystemPrompt } from "./prompt.js";
+import { buildSystemPrompt } from "./system-prompt.js";
 import { handleTddCommand } from "./commands.js";
 import { persistState, restoreState } from "./persistence.js";
 import {
@@ -81,6 +81,7 @@ export default function activate(pi: ExtensionAPI): void {
         diffs: [],
         lastTestOutput: null,
         lastTestFailed: null,
+        recentTests: [],
         cycleCount: 0,
         enabled: desiredEnabled,
         plan: [],
@@ -201,7 +202,7 @@ export { PhaseStateMachine } from "./phase.js";
 export { loadConfig } from "./config.js";
 export { gateSingleToolCall } from "./gate.js";
 export { evaluateTransition, extractTestSignal, isTestCommand } from "./transition.js";
-export { buildSystemPrompt } from "./prompt.js";
+export { buildSystemPrompt } from "./system-prompt.js";
 export { handleTddCommand } from "./commands.js";
 export { guidelinesForPhase, resolveGuidelines, DEFAULTS as GUIDELINE_DEFAULTS } from "./guidelines.js";
 export { persistState, restoreState, STATE_ENTRY_TYPE } from "./persistence.js";

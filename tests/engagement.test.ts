@@ -9,7 +9,7 @@ import {
   type EngagementDeps,
 } from "../src/engagement.ts";
 import { handleTddCommand } from "../src/commands.ts";
-import { buildSystemPrompt } from "../src/prompt.ts";
+import { buildSystemPrompt } from "../src/system-prompt.ts";
 import { resolveGuidelines } from "../src/guidelines.ts";
 import type { TDDConfig } from "../src/types.ts";
 

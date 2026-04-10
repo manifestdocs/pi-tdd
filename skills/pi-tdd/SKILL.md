@@ -11,6 +11,8 @@ Use this skill when the task is being handled inside `pi-tdd` or when the user w
 
 `pi-tdd` is not just about "write a failing test first". Its value comes from making sure the requested feature is translated into testable behavior before implementation starts.
 
+Use the repository's own instructions, such as `AGENTS.md` or the active system prompt, for broader coding conventions. This skill only adds TDD workflow guidance.
+
 Use `SPEC` as an optional preflight step when the user's request can't yet be translated directly into a failing test — the user story, expected behavior, or acceptance criteria need to be pinned down first.
 
 ## SPEC Workflow
@@ -24,7 +26,7 @@ When the request needs sharpening:
    What problem or pain point is being solved?
 4. Write observable acceptance criteria:
    How will we know the feature is done?
-5. Translate each acceptance criterion into one or more test cases.
+5. Translate each acceptance criterion into one or more test cases and decide whether the proof should start at the unit level, the integration level, or both.
 6. Capture those checks as the `SPEC` list.
 7. Move into `RED` only after the requested behavior is testable.
 
@@ -41,19 +43,19 @@ If you cannot explain the user-visible behavior and the acceptance criteria, do 
 
 ### RED
 
-- Add or modify a test for a single acceptance criterion.
+- Add or modify the cheapest failing test for a single acceptance criterion.
+- Use unit tests for isolated logic and integration tests when the bug or feature lives at a boundary, contract, or wiring seam.
 - Confirm the test fails for the expected reason.
 - Do not implement the fix yet.
 
 ### GREEN
 
 - Write the smallest correct code for the behavior the failing test asserts.
-- Correctness comes first, but no gold-plating, refactors, or unrelated cleanup — save polish and abstractions for REFACTOR.
+- Stay scoped to the current failing test. Save cleanup and broader changes for REFACTOR.
 
 ### REFACTOR
 
-- Refine the code from this cycle: naming, readability, duplication, structure.
-- Align with the project's coding guidelines and the patterns used in the broader codebase — the new code should look like it belongs.
+- Refine the code from this cycle without changing behavior: naming, readability, duplication, structure.
 - If a test breaks, you changed behavior — revert and try a different approach.
 - Stay scoped to this cycle's work.
 
@@ -106,5 +108,6 @@ Testable specification:
 
 - Do not treat `SPEC` as vague brainstorming.
 - Do not treat passing tests as success unless the tests actually prove the requested behavior.
+- Do not rely on mocked unit tests alone when the real risk is at a boundary between units.
 - Prefer one acceptance criterion per RED/GREEN cycle when possible.
 - When uncertain, tighten the specification before writing more code.
