@@ -1,6 +1,6 @@
 import { complete, type Model } from "@mariozechner/pi-ai";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { TDDConfig } from "./types.js";
+import type { ReviewModels, TDDConfig } from "./types.js";
 
 /**
  * Shared infrastructure for the two review steps that bookend a TDD cycle:
@@ -33,31 +33,16 @@ export async function runReview(
   ctx: ExtensionContext,
   config: TDDConfig
 ): Promise<RawReviewResponse> {
-  const model = resolveReviewModel(ctx, config);
+  const model = resolveReviewModel(ctx, config, request.label as ReviewLabel);
   if (!model) {
     throw new Error("No review model available");
   }
 
-  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-  if (!auth.ok) {
-    throw new Error(auth.error);
-  }
-  if (!auth.apiKey) {
-    throw new Error(`No API key configured for ${model.provider}/${model.id}`);
-  }
+  const auth = await resolveReviewAuth(ctx, model);
 
   const response = await complete(
     model,
-    {
-      systemPrompt: request.systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: request.userPrompt }],
-          timestamp: Date.now(),
-        },
-      ],
-    },
+    reviewRequestBody(request),
     {
       apiKey: auth.apiKey,
       headers: auth.headers,
@@ -73,12 +58,7 @@ export async function runReview(
     throw new Error(response.errorMessage ?? `${request.label} request failed`);
   }
 
-  const text = response.content
-    .filter((content): content is { type: "text"; text: string } => content.type === "text")
-    .map((content) => content.text)
-    .join("\n")
-    .trim();
-
+  const text = responseText(response.content);
   if (!text) {
     throw new Error(`${request.label} returned no text`);
   }
@@ -86,14 +66,65 @@ export async function runReview(
   return { text };
 }
 
-export function resolveReviewModel(ctx: ExtensionContext, config: TDDConfig): Model | undefined {
+export type ReviewLabel = keyof ReviewModels;
+
+export function resolveReviewModel(
+  ctx: ExtensionContext,
+  config: TDDConfig,
+  label?: ReviewLabel
+): Model | undefined {
+  // Per-review override (e.g. reviewModels.preflight)
+  if (label) {
+    const ref = config.reviewModels[label];
+    if (ref) {
+      return ctx.modelRegistry.find(ref.provider, ref.model);
+    }
+  }
+
+  // Top-level fallback
   if (config.reviewProvider && config.reviewModel) {
     return ctx.modelRegistry.find(config.reviewProvider, config.reviewModel);
   }
+
+  // Session active model
   return ctx.model;
 }
 
 export function extractJSON(raw: string): string {
   const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   return fenced ? fenced[1].trim() : raw.trim();
+}
+
+async function resolveReviewAuth(ctx: ExtensionContext, model: Model) {
+  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+  if (!auth.ok) {
+    throw new Error(auth.error);
+  }
+  if (!auth.apiKey) {
+    throw new Error(`No API key configured for ${model.provider}/${model.id}`);
+  }
+  return auth;
+}
+
+function reviewRequestBody(request: ReviewRequest) {
+  return {
+    systemPrompt: request.systemPrompt,
+    messages: [
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: request.userPrompt }],
+        timestamp: Date.now(),
+      },
+    ],
+  };
+}
+
+function responseText(
+  content: Array<{ type: string; text?: string }>
+): string {
+  return content
+    .filter((item): item is { type: "text"; text: string } => item.type === "text" && !!item.text)
+    .map((item) => item.text)
+    .join("\n")
+    .trim();
 }

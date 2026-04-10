@@ -39,63 +39,17 @@ const SYSTEM_PROMPT = loadPrompt("postflight-system");
 
 export function buildPostflightUserPrompt(input: PostflightInput): string {
   const { state, userStory } = input;
-  const lines: string[] = [];
-
-  if (userStory && userStory.trim().length > 0) {
-    lines.push("User story / request:");
-    lines.push(userStory.trim());
-    lines.push("");
-  }
-
-  lines.push("Spec checklist:");
-  if (state.plan.length === 0) {
-    lines.push("(no spec checklist was set)");
-  } else {
-    state.plan.forEach((item, idx) => {
-      const marker = idx < state.planCompleted ? "[x]" : "[ ]";
-      lines.push(`${marker} ${idx + 1}. ${item}`);
-    });
-  }
-  lines.push("");
-
-  lines.push(`Cycle count: ${state.cycleCount}`);
-  if (state.lastTestFailed !== null) {
-    lines.push(`Last test result: ${state.lastTestFailed ? "FAILED" : "PASSED"}`);
-  }
-  if (state.lastTestOutput) {
-    lines.push("Last test output (truncated):");
-    lines.push(truncateFromEnd(state.lastTestOutput, 1500));
-  }
-  lines.push("");
-
-  lines.push("Recent test runs captured in this cycle:");
-  if (state.recentTests.length === 0) {
-    lines.push("(no test runs were captured in this cycle)");
-  } else {
-    state.recentTests.forEach((test, index) => {
-      lines.push(
-        `${index + 1}. ${test.failed ? "FAIL" : "PASS"} | ${formatProofLevel(test.level)} | ${test.command}`
-      );
-    });
-  }
-  lines.push("");
-  lines.push("Use this history to decide whether the completed work was proven at the right level.");
-  lines.push("Unit tests are appropriate for isolated logic; integration tests matter when the behavior crosses boundaries, contracts, or wiring.");
-  lines.push("");
-
-  if (state.diffs.length > 0) {
-    lines.push("Recent tool calls / mutations made during the cycle:");
-    state.diffs.forEach((diff) => lines.push(`  - ${diff}`));
-    lines.push("");
-  }
-
-  lines.push("Decide whether the cycle delivered what the spec asked for.");
-  lines.push("");
-  lines.push("Respond with one of:");
-  lines.push(`{"ok": true, "reason": "short explanation of what was delivered"}`);
-  lines.push(`{"ok": false, "reason": "short overall explanation", "gaps": [{"itemIndex": 1, "message": "..."}, {"itemIndex": null, "message": "general gap"}]}`);
-
-  return lines.join("\n");
+  return [
+    ...userStoryLines(userStory),
+    ...postflightSpecLines(state),
+    "",
+    ...testEvidenceLines(state),
+    "",
+    ...recentTestLines(state),
+    "",
+    ...diffLines(state),
+    ...postflightResponseLines(),
+  ].join("\n");
 }
 
 export async function runPostflight(
@@ -196,4 +150,77 @@ function formatProofLevel(level: PhaseState["recentTests"][number]["level"]): st
     default:
       return "UNKNOWN";
   }
+}
+
+function userStoryLines(userStory: string | undefined): string[] {
+  if (!userStory?.trim()) {
+    return [];
+  }
+
+  return ["User story / request:", userStory.trim(), ""];
+}
+
+function postflightSpecLines(state: PhaseState): string[] {
+  const items = state.plan.length === 0
+    ? ["(no spec checklist was set)"]
+    : state.plan.map((item, index) => `${specMarker(state, index)} ${index + 1}. ${item}`);
+
+  return ["Spec checklist:", ...items];
+}
+
+function specMarker(state: PhaseState, index: number): string {
+  return index < state.planCompleted ? "[x]" : "[ ]";
+}
+
+function testEvidenceLines(state: PhaseState): string[] {
+  const lines = [`Cycle count: ${state.cycleCount}`];
+
+  if (state.lastTestFailed !== null) {
+    lines.push(`Last test result: ${state.lastTestFailed ? "FAILED" : "PASSED"}`);
+  }
+  if (state.lastTestOutput) {
+    lines.push("Last test output (truncated):");
+    lines.push(truncateFromEnd(state.lastTestOutput, 1500));
+  }
+
+  return lines;
+}
+
+function recentTestLines(state: PhaseState): string[] {
+  const items = state.recentTests.length === 0
+    ? ["(no test runs were captured in this cycle)"]
+    : state.recentTests.map(
+        (test, index) =>
+          `${index + 1}. ${test.failed ? "FAIL" : "PASS"} | ${formatProofLevel(test.level)} | ${test.command}`
+      );
+
+  return [
+    "Recent test runs captured in this cycle:",
+    ...items,
+    "",
+    "Use this history to decide whether the completed work was proven at the right level.",
+    "Unit tests are appropriate for isolated logic; integration tests matter when the behavior crosses boundaries, contracts, or wiring.",
+  ];
+}
+
+function diffLines(state: PhaseState): string[] {
+  if (state.diffs.length === 0) {
+    return [];
+  }
+
+  return [
+    "Recent tool calls / mutations made during the cycle:",
+    ...state.diffs.map((diff) => `  - ${diff}`),
+    "",
+  ];
+}
+
+function postflightResponseLines(): string[] {
+  return [
+    "Decide whether the cycle delivered what the spec asked for.",
+    "",
+    "Respond with one of:",
+    `{"ok": true, "reason": "short explanation of what was delivered"}`,
+    `{"ok": false, "reason": "short overall explanation", "gaps": [{"itemIndex": 1, "message": "..."}, {"itemIndex": null, "message": "general gap"}]}`,
+  ];
 }

@@ -13,6 +13,7 @@ function makeConfig(overrides: Partial<TDDConfig> = {}): TDDConfig {
     enabled: true,
     reviewModel: null,
     reviewProvider: null,
+    reviewModels: {},
     autoTransition: true,
     refactorTransition: "user",
     allowReadInAllPhases: true,

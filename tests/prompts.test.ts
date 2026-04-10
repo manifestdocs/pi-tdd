@@ -30,7 +30,7 @@ describe("prompts", () => {
   it("loads bullet-list prompt files as plain guideline strings", () => {
     expect(loadPromptList("tool-engage-guidelines")).toEqual([
       "Call tdd_engage at the start of any feature or bug-fix work, before any code changes. Use phase='SPEC' if requirements need clarification, phase='RED' if you can write the first failing test immediately.",
-      "Do NOT engage TDD for investigation, navigation, branch management, code review, or research. Stay dormant for non-feature work.",
+      "Stay dormant for investigation, navigation, branch management, code review, and research. Engage TDD when the work shifts into delivering or fixing behavior.",
       "When transitioning into RED, the pre-flight gate runs automatically and validates the spec checklist. If pre-flight fails, refine the spec before retrying.",
       "Call tdd_disengage when feature work is finished — post-flight will run automatically to verify the work delivered what was asked.",
     ]);
@@ -87,6 +87,7 @@ describe("prompts", () => {
       enabled: true,
       reviewModel: null,
       reviewProvider: null,
+      reviewModels: {},
       autoTransition: true,
       refactorTransition: "user",
       allowReadInAllPhases: true,
@@ -125,6 +126,7 @@ describe("prompts", () => {
       enabled: true,
       reviewModel: null,
       reviewProvider: null,
+      reviewModels: {},
       autoTransition: true,
       refactorTransition: "user",
       allowReadInAllPhases: true,
@@ -140,7 +142,7 @@ describe("prompts", () => {
     });
 
     expect(prompt).not.toContain("coding guidelines");
-    expect(prompt).toContain("Refine the code from this cycle without changing behavior");
+    expect(prompt).toContain("Preserve behavior while refining the code from this cycle");
   });
 
   it("keeps the postflight prompt focused on spec delivery and project fit", () => {
@@ -148,8 +150,8 @@ describe("prompts", () => {
 
     expect(postflight).toContain("delivered what its spec asked for and fits the project it was added to");
     expect(postflight).toContain("The proving tests are at the right level for the behavior");
-    expect(postflight).toContain("repository's documented instructions, established code patterns, or chosen tech stack");
-    expect(postflight).toContain("not justified by the user request or the spec");
+    expect(postflight).toContain("aligns with the repository's documented instructions, established code patterns, and chosen tech stack");
+    expect(postflight).toContain("When the cycle is complete, return `ok: true`");
     expect(postflight).not.toContain("NOT to police whether the implementation was minimal");
   });
 
@@ -158,5 +160,13 @@ describe("prompts", () => {
 
     expect(preflight).toContain("whether unit proof, integration proof, or both are needed");
     expect(preflight).toContain("Boundary-heavy items should usually be provable with integration tests");
+    expect(preflight).toContain("Approve spec items that are concrete, observable, distinct, behavior-focused");
+  });
+
+  it("keeps tiny tool snippets inline instead of as prompt files", () => {
+    expect(PROMPT_NAMES).not.toContain("tool-engage-snippet");
+    expect(PROMPT_NAMES).not.toContain("tool-disengage-snippet");
+    expect(PROMPT_NAMES).not.toContain("tool-preflight-snippet");
+    expect(PROMPT_NAMES).not.toContain("tool-postflight-snippet");
   });
 });

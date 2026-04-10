@@ -1,3 +1,3 @@
-- Pre-flight runs AUTOMATICALLY when transitioning into RED via tdd_engage(phase: 'RED') or /tdd red. You normally do NOT need to call this tool yourself.
-- Call tdd_preflight directly only when you want to inspect the spec checklist mid-flow without attempting a phase transition (for example, after editing the spec to verify it's now solid).
+- Pre-flight runs AUTOMATICALLY when transitioning into RED via tdd_engage(phase: 'RED') or /tdd red. Usually, you can let that automatic path handle the review.
+- Call tdd_preflight directly for a mid-flow spec checkpoint when you want to inspect the checklist before attempting a phase transition (for example, after editing the spec to verify it's now solid).
 - If pre-flight returns issues, refine the spec checklist (via /tdd spec-set or by editing the items) before retrying RED.

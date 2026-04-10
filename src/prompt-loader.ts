@@ -11,13 +11,9 @@ export const PROMPT_NAMES = [
   "postflight-system",
   "preflight-system",
   "tool-disengage-guidelines",
-  "tool-disengage-snippet",
   "tool-engage-guidelines",
-  "tool-engage-snippet",
   "tool-postflight-guidelines",
-  "tool-postflight-snippet",
   "tool-preflight-guidelines",
-  "tool-preflight-snippet",
 ] as const;
 
 export type PromptName = typeof PROMPT_NAMES[number];

@@ -37,10 +37,21 @@ export interface GuidelinesConfig {
   security: string | null;
 }
 
+export interface ReviewModelRef {
+  provider: string;
+  model: string;
+}
+
+export interface ReviewModels {
+  preflight?: ReviewModelRef;
+  postflight?: ReviewModelRef;
+}
+
 export interface TDDConfig {
   enabled: boolean;
   reviewModel: string | null;
   reviewProvider: string | null;
+  reviewModels: ReviewModels;
   autoTransition: boolean;
   refactorTransition: "user" | "agent" | "timeout";
   allowReadInAllPhases: boolean;

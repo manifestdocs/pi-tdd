@@ -40,35 +40,17 @@ export function shouldRunPreflightOnRedEntry(
 const SYSTEM_PROMPT = loadPrompt("preflight-system");
 
 export function buildPreflightUserPrompt(input: PreflightInput): string {
-  const lines: string[] = [];
-  if (input.userStory && input.userStory.trim().length > 0) {
-    lines.push("User story / request:");
-    lines.push(input.userStory.trim());
-    lines.push("");
-  }
-
-  lines.push("Spec checklist (one item per line):");
-  if (input.spec.length === 0) {
-    lines.push("(empty)");
-  } else {
-    input.spec.forEach((item, idx) => {
-      lines.push(`${idx + 1}. ${item}`);
-    });
-  }
-
-  lines.push("");
-  lines.push("For each spec item, consider whether the best first proof should be a unit test, an integration test, or both.");
-  lines.push("Boundary-heavy behavior should usually be provable with integration-level tests, not only isolated mocks.");
-  lines.push("");
-  lines.push("Decide whether this spec is ready to start a TDD cycle.");
-  lines.push("");
-  lines.push("Respond with one of:");
-  lines.push(`{"ok": true, "reason": "short explanation of why it's ready"}`);
-  lines.push(`{"ok": false, "reason": "short overall explanation", "issues": [{"itemIndex": 1, "message": "..."}, {"itemIndex": null, "message": "general gap"}]}`);
-  lines.push("");
-  lines.push("itemIndex is the 1-based position of the spec item, or null for issues that span the whole spec.");
-
-  return lines.join("\n");
+  return [
+    ...userStoryLines(input.userStory),
+    ...specChecklistLines(input.spec),
+    "",
+    "For each spec item, consider whether the best first proof should be a unit test, an integration test, or both.",
+    "Boundary-heavy behavior should usually be provable with integration-level tests, not only isolated mocks.",
+    "",
+    "Decide whether this spec is ready to start a TDD cycle.",
+    "",
+    ...preflightResponseLines(),
+  ].join("\n");
 }
 
 export async function runPreflight(
@@ -154,4 +136,30 @@ export function formatPreflightResult(result: PreflightResult): string {
     lines.push(`${prefix} ${issue.message}`);
   }
   return lines.join("\n");
+}
+
+function userStoryLines(userStory: string | undefined): string[] {
+  if (!userStory?.trim()) {
+    return [];
+  }
+
+  return ["User story / request:", userStory.trim(), ""];
+}
+
+function specChecklistLines(spec: string[]): string[] {
+  const items = spec.length === 0
+    ? ["(empty)"]
+    : spec.map((item, index) => `${index + 1}. ${item}`);
+
+  return ["Spec checklist (one item per line):", ...items];
+}
+
+function preflightResponseLines(): string[] {
+  return [
+    "Respond with one of:",
+    `{"ok": true, "reason": "short explanation of why it's ready"}`,
+    `{"ok": false, "reason": "short overall explanation", "issues": [{"itemIndex": 1, "message": "..."}, {"itemIndex": null, "message": "general gap"}]}`,
+    "",
+    "itemIndex is the 1-based position of the spec item, or null for issues that span the whole spec.",
+  ];
 }

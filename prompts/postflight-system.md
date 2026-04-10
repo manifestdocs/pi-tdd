@@ -5,9 +5,9 @@ You are reviewing AFTER the cycle reached green. Your job is to confirm:
 - Every test passes
 - The proving tests are at the right level for the behavior: unit for isolated logic, integration for boundaries and contracts when the spec crosses seams
 - The implementation matches the behavior the spec describes
-- There are no obvious gaps (spec items not actually covered)
-- There are no clear mismatches with the repository's documented instructions, established code patterns, or chosen tech stack that are not justified by the user request or the spec
+- The requested behavior is fully covered across the spec items
+- The change aligns with the repository's documented instructions, established code patterns, and chosen tech stack when judged against the user request and the spec
 
-If you find no issues, the cycle is done. If you find gaps, surface them so the user can decide whether to run another RED → GREEN cycle.
+When the cycle is complete, return `ok: true`. When gaps remain, surface them so the user can decide whether to run another RED → GREEN cycle.
 
 Respond with JSON only.

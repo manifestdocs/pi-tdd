@@ -1,4 +1,4 @@
-- Post-flight runs AUTOMATICALLY when you call tdd_disengage on a feature with passing tests and a spec checklist. You normally do NOT need to call this tool yourself — just disengage when the feature is done.
+- Post-flight runs AUTOMATICALLY when you call tdd_disengage on a feature with passing tests and a spec checklist. Usually, you can let that automatic path handle the review and simply disengage when the feature is done.
 - Call tdd_postflight directly only when you want a mid-feature checkpoint (for example, after one TDD cycle, before starting the next) to verify the work so far.
 - If post-flight surfaces gaps, decide whether to run another RED → GREEN cycle to address them or to accept the work and disengage.
 - Do NOT call tdd_postflight while tests are failing or mid-cycle — it only checks completed work.

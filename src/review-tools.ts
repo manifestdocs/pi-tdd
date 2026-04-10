@@ -6,13 +6,13 @@ import type {
 import type { EngagementDeps } from "./engagement.js";
 import { formatPreflightResult, runPreflight, type PreflightResult } from "./preflight.js";
 import { formatPostflightResult, runPostflight, type PostflightResult } from "./postflight.js";
-import { loadPrompt, loadPromptList } from "./prompt-loader.js";
+import { loadPromptList } from "./prompt-loader.js";
 
 export const PREFLIGHT_TOOL_NAME = "tdd_preflight";
 export const POSTFLIGHT_TOOL_NAME = "tdd_postflight";
-const PREFLIGHT_PROMPT_SNIPPET = loadPrompt("tool-preflight-snippet");
+const PREFLIGHT_PROMPT_SNIPPET = "Inspect the pre-flight verdict on the current spec.";
 const PREFLIGHT_PROMPT_GUIDELINES = loadPromptList("tool-preflight-guidelines");
-const POSTFLIGHT_PROMPT_SNIPPET = loadPrompt("tool-postflight-snippet");
+const POSTFLIGHT_PROMPT_SNIPPET = "Inspect the post-flight verdict on the current cycle.";
 const POSTFLIGHT_PROMPT_GUIDELINES = loadPromptList("tool-postflight-guidelines");
 
 interface PreflightParams {

@@ -8,14 +8,14 @@ import type { PhaseStateMachine } from "./phase.js";
 import { persistState } from "./persistence.js";
 import { formatPreflightResult, runPreflight, shouldRunPreflightOnRedEntry } from "./preflight.js";
 import { formatPostflightResult, runPostflight, type PostflightResult } from "./postflight.js";
-import { loadPrompt, loadPromptList } from "./prompt-loader.js";
+import { loadPromptList } from "./prompt-loader.js";
 import { POSTFLIGHT_TOOL_NAME, PREFLIGHT_TOOL_NAME } from "./review-tools.js";
 import type { TDDConfig, TDDPhase } from "./types.js";
 
 const STATUS_KEY = "tdd-gate";
-const ENGAGE_PROMPT_SNIPPET = loadPrompt("tool-engage-snippet");
+const ENGAGE_PROMPT_SNIPPET = "Engage TDD enforcement before starting a feature or bug fix.";
 const ENGAGE_PROMPT_GUIDELINES = loadPromptList("tool-engage-guidelines");
-const DISENGAGE_PROMPT_SNIPPET = loadPrompt("tool-disengage-snippet");
+const DISENGAGE_PROMPT_SNIPPET = "Disengage TDD enforcement when leaving feature work.";
 const DISENGAGE_PROMPT_GUIDELINES = loadPromptList("tool-disengage-guidelines");
 
 export const ENGAGE_TOOL_NAME = "tdd_engage";
@@ -199,60 +199,12 @@ export function createEngageTool(
       const config = deps.getConfig();
       const machine = deps.machine;
       if (!config.enabled) {
-        machine.enabled = false;
-        ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
-        if (ctx.hasUI) {
-          ctx.ui.notify("TDD is disabled by configuration", "warning");
-        }
-        return {
-          content: [
-            {
-              type: "text",
-              text: "TDD is disabled by configuration.",
-            },
-          ],
-          details: { engaged: false, phase: null, reason: "disabled by configuration" },
-        };
+        return disabledEngageResponse(machine, ctx);
       }
 
       const phase = normalizePhase(params.phase) ?? "SPEC";
       const reason = String(params.reason ?? "feature/bug work");
-
-      const wasEnabled = machine.enabled;
-      const preflight = await runEngagePreflightGate(machine, phase, reason, ctx, config);
-      if (!preflight.allowed) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: preflight.text ?? "Engagement into RED is blocked.",
-            },
-          ],
-          details: { engaged: machine.enabled, phase: machine.phase, reason },
-        };
-      }
-
-      machine.enabled = true;
-      if (machine.phase !== phase) {
-        machine.transitionTo(phase, `tdd_engage: ${reason}`, true);
-      }
-
-      persistIfEnabled(deps);
-      ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
-      if (ctx.hasUI) {
-        const verb = wasEnabled ? "TDD phase set to" : "TDD engaged in";
-        ctx.ui.notify(`${verb} ${phase}: ${reason}`, "info");
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `TDD engaged in ${phase} phase. ${reason}`,
-          },
-        ],
-        details: { engaged: true, phase, reason },
-      };
+      return engageMachine(deps, ctx, phase, reason, `tdd_engage: ${reason}`);
     },
   };
 }
@@ -276,32 +228,7 @@ export function createDisengageTool(
       const machine = deps.machine;
       const config = deps.getConfig();
       const reason = String(params.reason ?? "leaving feature work");
-      const wasEnabled = machine.enabled;
-
-      const { result: postflightResult, summary: postflightSummary } =
-        await maybeRunPostflightOnDisengage(machine, ctx, config);
-
-      machine.enabled = false;
-
-      persistIfEnabled(deps);
-      ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
-      if (ctx.hasUI && wasEnabled) {
-        ctx.ui.notify(`TDD disengaged: ${reason}`, "info");
-      }
-
-      const text = postflightSummary
-        ? `${postflightSummary}\n\nTDD disengaged. ${reason}`
-        : `TDD disengaged. ${reason}`;
-
-      return {
-        content: [{ type: "text", text }],
-        details: {
-          engaged: false,
-          phase: null,
-          reason,
-          postflight: postflightResult,
-        },
-      };
+      return disengageMachine(deps, ctx, config, reason);
     },
   };
 }
@@ -333,42 +260,134 @@ export async function applyLifecycleHooks(
 
   if (config.engageOnTools.includes(toolName) && !machine.enabled) {
     const targetPhase = config.startInSpecMode ? "SPEC" : "RED";
-    const preflight = await runEngagePreflightGate(
-      machine,
+    const result = await engageMachine(
+      deps,
+      ctx,
       targetPhase,
       `lifecycle hook: ${toolName}`,
-      ctx,
-      config
+      `lifecycle hook: ${toolName}`,
+      { viaToolName: toolName }
     );
-    if (!preflight.allowed) {
-      return { isControlTool: false };
+    if (result.details.engaged) {
+      return { isControlTool: false, engaged: true };
     }
-
-    machine.enabled = true;
-    if (machine.phase !== targetPhase) {
-      machine.transitionTo(targetPhase, `lifecycle hook: ${toolName}`, true);
-    }
-    persistIfEnabled(deps);
-    ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
-    if (ctx.hasUI) {
-      ctx.ui.notify(`TDD engaged in ${targetPhase} (via ${toolName})`, "info");
-    }
-    return { isControlTool: false, engaged: true };
+    return { isControlTool: false };
   }
 
   if (config.disengageOnTools.includes(toolName) && machine.enabled) {
-    // Run postflight BEFORE flipping the machine off, same as the explicit
-    // disengage paths. The shared helper handles eligibility and notifications.
-    await maybeRunPostflightOnDisengage(machine, ctx, config);
-
-    machine.enabled = false;
-    persistIfEnabled(deps);
-    ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
-    if (ctx.hasUI) {
-      ctx.ui.notify(`TDD disengaged (via ${toolName})`, "info");
-    }
+    await disengageMachine(deps, ctx, config, `via ${toolName}`);
     return { isControlTool: false, disengaged: true };
   }
 
   return { isControlTool: false };
+}
+
+function disabledEngageResponse(
+  machine: PhaseStateMachine,
+  ctx: ExtensionContext
+) {
+  machine.enabled = false;
+  ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
+  if (ctx.hasUI) {
+    ctx.ui.notify("TDD is disabled by configuration", "warning");
+  }
+
+  return {
+    content: [{ type: "text" as const, text: "TDD is disabled by configuration." }],
+    details: { engaged: false, phase: null, reason: "disabled by configuration" },
+  };
+}
+
+async function engageMachine(
+  deps: EngagementDeps,
+  ctx: ExtensionContext,
+  phase: TDDPhase,
+  reason: string,
+  transitionReason: string,
+  options?: { viaToolName?: string }
+) {
+  const machine = deps.machine;
+  const config = deps.getConfig();
+  const wasEnabled = machine.enabled;
+  const preflight = await runEngagePreflightGate(machine, phase, reason, ctx, config);
+  if (!preflight.allowed) {
+    return blockedEngageResponse(machine, reason, preflight.text);
+  }
+
+  machine.enabled = true;
+  if (machine.phase !== phase) {
+    machine.transitionTo(phase, transitionReason, true);
+  }
+
+  persistIfEnabled(deps);
+  ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
+  notifyEngaged(ctx, wasEnabled, phase, reason, options?.viaToolName);
+
+  return {
+    content: [{ type: "text" as const, text: `TDD engaged in ${phase} phase. ${reason}` }],
+    details: { engaged: true, phase, reason },
+  };
+}
+
+function blockedEngageResponse(
+  machine: PhaseStateMachine,
+  reason: string,
+  text?: string
+) {
+  return {
+    content: [{ type: "text" as const, text: text ?? "Engagement into RED is blocked." }],
+    details: { engaged: machine.enabled, phase: machine.phase, reason },
+  };
+}
+
+function notifyEngaged(
+  ctx: ExtensionContext,
+  wasEnabled: boolean,
+  phase: TDDPhase,
+  reason: string,
+  viaToolName?: string
+): void {
+  if (!ctx.hasUI) {
+    return;
+  }
+
+  const message = viaToolName
+    ? `TDD engaged in ${phase} (via ${viaToolName})`
+    : `${wasEnabled ? "TDD phase set to" : "TDD engaged in"} ${phase}: ${reason}`;
+  ctx.ui.notify(message, "info");
+}
+
+async function disengageMachine(
+  deps: EngagementDeps,
+  ctx: ExtensionContext,
+  config: TDDConfig,
+  reason: string
+) {
+  const machine = deps.machine;
+  const wasEnabled = machine.enabled;
+  const { result: postflightResult, summary: postflightSummary } =
+    await maybeRunPostflightOnDisengage(machine, ctx, config);
+
+  machine.enabled = false;
+  persistIfEnabled(deps);
+  ctx.ui.setStatus(STATUS_KEY, machine.bottomBarText());
+  if (ctx.hasUI && wasEnabled) {
+    ctx.ui.notify(`TDD disengaged: ${reason}`, "info");
+  }
+
+  return {
+    content: [{ type: "text" as const, text: disengageText(reason, postflightSummary) }],
+    details: {
+      engaged: false,
+      phase: null,
+      reason,
+      postflight: postflightResult,
+    },
+  };
+}
+
+function disengageText(reason: string, postflightSummary: string | null): string {
+  return postflightSummary
+    ? `${postflightSummary}\n\nTDD disengaged. ${reason}`
+    : `TDD disengaged. ${reason}`;
 }

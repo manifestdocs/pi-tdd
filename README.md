@@ -1,12 +1,31 @@
 # pi-tdd
 
-`pi-tdd` is a TDD phase gate for [Pi](https://pi.dev/), the terminal coding agent by Mario Zechner. It keeps an agent inside a deliberate `SPEC -> RED -> GREEN -> REFACTOR` loop instead of letting it drift straight into broad implementation.
+A TDD phase gate for [Pi](https://pi.dev), the terminal coding agent. `pi-tdd` keeps an AI agent inside a deliberate **SPEC -> RED -> GREEN -> REFACTOR** loop instead of letting it drift straight into broad implementation.
 
-The extension injects phase-specific instructions into the agent prompt, gates tool calls against the current phase, runs LLM-backed pre-flight and post-flight reviews at cycle boundaries, watches test runs, and persists TDD state across the session.
+The extension injects phase-specific instructions into the agent prompt, gates tool calls against the current phase, runs LLM-backed reviews at cycle boundaries, watches test output for pass/fail signals, and persists TDD state across the session.
 
-In a hurry? Jump to [Quick Start](#quick-start).
+**Dormant by default.** Fresh sessions are unconstrained. TDD only engages when the agent calls `tdd_engage`, a lifecycle hook fires, or you run an explicit `/tdd` command. Investigation, navigation, code review, and other non-feature work are never gated.
 
-## Quick Start
+---
+
+**Table of contents**
+
+- [Quick start](#quick-start)
+- [What is TDD?](#what-is-tdd)
+- [Why this matters for coding agents](#why-this-matters-for-coding-agents)
+- [How the phases work](#how-the-phases-work)
+- [Slash commands](#slash-commands)
+- [Agent tools](#agent-tools)
+- [Reviews](#reviews)
+- [Recommended workflow](#recommended-workflow)
+- [Configuration reference](#configuration-reference)
+- [Coding guidelines are separate](#coding-guidelines-are-separate)
+- [Local development](#local-development)
+- [Limits](#limits)
+
+---
+
+## Quick start
 
 ### 1. Install Pi
 
@@ -14,302 +33,384 @@ In a hurry? Jump to [Quick Start](#quick-start).
 npm install -g @mariozechner/pi-coding-agent
 ```
 
-Then authenticate:
+Launch Pi and authenticate:
 
 ```bash
 pi
 ```
 
-Inside Pi, run `/login`, or set your provider API key before launching Pi.
+Inside Pi, run `/login` or set your provider API key as an environment variable before launching.
 
-### 2. Install `pi-tdd`
+### 2. Install pi-tdd
 
-Install into the current project:
+**From Git** (recommended for most users):
 
 ```bash
+# Project-local install (writes to .pi/settings.json)
 pi install -l git:git@github.com:manifestdocs/pi-tdd.git
-```
 
-That writes to the project's `.pi/settings.json`.
-
-Install globally for your user instead:
-
-```bash
+# Global install (writes to ~/.pi/agent/settings.json)
 pi install git:git@github.com:manifestdocs/pi-tdd.git
 ```
 
-That writes to `~/.pi/agent/settings.json`.
-
-You can also install the current checkout during local development:
+**From a local checkout** (for contributors):
 
 ```bash
+git clone git@github.com:manifestdocs/pi-tdd.git
+cd pi-tdd
+npm install && npm run build
+
+# Project-local
 npm run pi:install
-```
 
-Or install the current checkout globally:
-
-```bash
+# Global
 npm run pi:install:global
 ```
 
-If Pi is already running, execute:
+If Pi is already running, run `/reload` inside the session to pick up the extension.
+
+### 3. Use it
+
+Ask the agent to work on a feature normally. It will call `tdd_engage` on its own when it recognizes feature or bug-fix work:
 
 ```text
-/reload
+Fix the off-by-one error in pagination. The last page shows one fewer item than it should.
 ```
 
-### 3. Start Using The Gate
+The agent engages TDD, writes a failing test, makes the fix, confirms the test passes, and cleans up. When the work is done, it calls `tdd_disengage`.
 
-`pi-tdd` is **dormant by default**. A fresh session does not gate anything, so investigation, navigation, branch checkouts, code review, and other non-feature work all flow normally.
-
-The gate engages in three ways:
-
-1. **The agent calls `tdd_engage`** when it recognises feature or bug-fix work. This is the natural path: you can prompt with normal language like "fix the off-by-one in pagination" and the agent will engage TDD on its own before making any code changes.
-2. **A configured task-management tool fires** (e.g., `mcp__manifest__start_feature`). See `engageOnTools` below.
-3. **You run an explicit `/tdd` phase command** like `/tdd spec` or `/tdd red`. These both engage TDD and switch to that phase.
-
-A worked example using slash commands directly:
+You can also drive the cycle manually with slash commands:
 
 ```text
-/tdd status
 /tdd spec
-/tdd spec-set "rejects checkout when the cart is empty" "shows a clear message explaining that at least one item is required" "allows checkout once the cart contains an item"
+/tdd spec-set "last page shows the correct item count" "boundary: page size evenly divides total" "boundary: page size does not evenly divide total"
 /tdd red
 ```
 
-Then prompt the agent normally, for example:
+## What is TDD?
 
-```text
-User story: as a shopper, I should not be able to check out with an empty cart.
-Acceptance criteria:
-1. Checkout fails when the cart has no items.
-2. The user sees a clear validation message.
-3. Checkout succeeds once at least one item is present.
-
-Write the first failing test only. Do not implement the fix yet.
-```
-
-After the failing test is confirmed, let the agent make the minimal implementation change. Once the test passes, the extension can move the session into `REFACTOR`. When the work is finished or you switch to investigation, run `/tdd disengage` (or let the agent call `tdd_disengage`).
-
-## Pi
-
-Pi is a terminal coding agent. You open it in a project, talk to it in natural language, and it can read files, edit code, and run shell commands on your behalf.
-
-If you already understand tools like Codex CLI, Claude Code, or Aider, Pi sits in the same category. The difference is that Pi is intentionally small and highly extensible. This package plugs into Pi as an extension.
-
-Official Pi quick start:
-
-```bash
-npm install -g @mariozechner/pi-coding-agent
-pi
-```
-
-You can authenticate either with `/login` inside Pi or with a provider API key in your shell environment.
-
-## TDD
-
-TDD means:
+Test-driven development is a workflow:
 
 1. Write a test that expresses the next behavior you want.
-2. Run it and confirm that it fails.
-3. Write the smallest amount of code that makes that test pass.
+2. Run it and confirm it fails.
+3. Write the smallest amount of code that makes it pass.
 4. Refactor without changing behavior.
 5. Repeat.
 
-That test does not have to be a unit test. Use the cheapest test that can actually prove the next behavior. For isolated domain logic, that is often a unit test. For boundaries such as persistence, HTTP contracts, CLI wiring, serialization, or interactions between components, the first honest RED test is often an integration test.
+The test does not have to be a unit test. Use the cheapest test that can prove the behavior. For isolated domain logic, that is often a unit test. For boundaries -- persistence, HTTP contracts, CLI wiring, serialization -- the honest first test is often an integration test.
 
-The point is not ceremony. The point is to make progress measurable. Instead of saying "the code looks done," you have a failing test, then a passing test, then a cleanup step.
+Before that loop starts, you need clarity on what you are building:
 
-Before that loop starts, you need to be explicit about the feature itself:
+- **User story**: what this enables for the user.
+- **Need**: what problem it solves.
+- **Acceptance criteria**: how you know the feature is done.
 
-- the user story: what this enables for the user
-- the need: what problem it solves
-- the acceptance criteria: how you know the feature is done
-
-If you skip that step, you can still do "strict TDD" and get very little value from it. You will just spend tokens proving that the agent implemented something consistently, not necessarily the right thing.
+Without that grounding, you can still follow strict TDD and get very little value from it. You end up proving the agent implemented *something* consistently, not necessarily the *right* thing.
 
 ## Why this matters for coding agents
 
-Coding agents are fast, but they also tend to:
+Coding agents are fast, but they tend to:
 
-- implement before specifying behavior
-- change too much at once
-- mix feature work with refactors
-- declare success from plausibility instead of proof
+- Implement before specifying behavior.
+- Change too much at once.
+- Mix feature work with refactors.
+- Declare success from plausibility instead of proof.
 
-Those problems are exactly what TDD is good at controlling.
-
-`pi-tdd` makes that discipline operational for an agent:
+Those problems are exactly what TDD controls for. `pi-tdd` makes that discipline operational:
 
 - It tells the model which kind of work is allowed right now.
-- It blocks or challenges out-of-phase tool calls.
-- It treats test output as the main transition signal.
+- It blocks out-of-phase tool calls (write/edit/bash are blocked in SPEC).
+- It treats test output as the transition signal between phases.
 - It keeps the cycle visible to the human operator through status and commands.
-- It gives you an override path when the gate is too strict, instead of silently letting the agent improvise.
+- It gives you an override path when the gate is too strict.
 
-For agents, that usually means less thrash, smaller diffs, better reviewability, and fewer "it seemed reasonable" changes.
+The result is smaller diffs, better reviewability, and fewer ungrounded changes.
 
-## Why `SPEC` Exists
+## How the phases work
 
-`SPEC` is an optional preflight step. It is not there for vague brainstorming. It exists to set the user's request up for success by making sure the test work is tied to a feature contract.
+### SPEC
 
-The intended flow is:
+Translate the user's request into testable acceptance criteria. Write tools (`write`, `edit`, `bash`) are blocked to keep focus on planning. Read tools are always allowed.
 
-1. State the user story clearly.
-2. Capture the acceptance criteria in observable terms.
-3. Translate those criteria into test cases and decide whether each one needs unit proof, integration proof, or both.
-4. Move into `RED` and implement one criterion at a time.
+The agent builds a numbered checklist of spec items. Each item is a concrete, observable behavior that can be proven with a test. The agent also decides whether each item needs unit proof, integration proof, or both.
 
-That mapping matters. If the specified tests do not come from the user story and acceptance criteria, the loop becomes expensive theater. The agent may still produce red tests, green tests, and refactors, but it is not converging on the right feature.
+SPEC does not auto-advance. Move to RED with `/tdd red` or by having the agent call `tdd_engage(phase: "RED")`.
 
-The name is intentional. `SPEC` lines up with specification-oriented testing styles in the RSpec and Vitest mold: tests are there to specify externally meaningful behavior, not just to exercise code paths.
+SPEC is optional. When acceptance criteria are already clear, engage directly into RED.
 
-Use `SPEC` when the request needs to be sharpened into something testable. Skip it when the requested behavior and acceptance criteria are already clear enough to go straight into `RED`.
+### RED
 
-## What The Extension Does
+Write a failing test for one acceptance criterion. Run it to confirm it fails for the expected reason.
 
-- Adds a `/tdd` command inside Pi.
-- Registers `tdd_engage`, `tdd_disengage`, `tdd_preflight`, and `tdd_postflight` tools the agent can call directly.
-- Tracks the current phase: `SPEC`, `RED`, `GREEN`, or `REFACTOR`.
-- Injects phase-specific system prompt guidance on every turn (only while engaged).
-- Gates phase-sensitive tool calls and runs LLM-backed reviews at cycle boundaries: a **pre-flight** check on the spec checklist before entering `RED`, and a **post-flight** check on the delivered work before disengaging.
-- Detects common test commands such as `npm test`, `pnpm test`, `pytest`, `cargo test`, `go test`, `vitest`, `jest`, and `rspec`.
-- Auto-advances from `RED -> GREEN` after a failing test signal and from `GREEN -> REFACTOR` after a passing test signal.
-- Persists phase state in the Pi session so the cycle survives within-session navigation.
+The phase auto-advances to GREEN when the extension detects a failing test signal.
 
-Important behavior details:
+### GREEN
 
-- **TDD is dormant by default.** Fresh sessions do not gate anything until the agent or user engages TDD. This keeps investigation, navigation, code review, and other non-feature work unconstrained.
-- The agent engages TDD by calling `tdd_engage(phase, reason)`. Phase defaults to `SPEC`; pass `RED` when acceptance criteria are already clear.
-- You can also engage by running an explicit `/tdd spec`, `/tdd red`, `/tdd green`, or `/tdd refactor` command.
-- Configurable lifecycle hooks can auto-engage when known task-management tools fire (see `engageOnTools` / `disengageOnTools` below).
-- `SPEC` does not auto-advance. You move out of it with `/tdd red`.
-- In the default config, `REFACTOR -> RED` is user-controlled, so you explicitly start the next cycle.
-- Read-only exploration is allowed in all phases by default.
-- The intended use of `SPEC` is to translate the user's request into a feature spec with concrete, testable acceptance checks.
+Write the smallest correct implementation that makes the failing test pass. Stay scoped to the current test -- save cleanup for REFACTOR.
 
-## `/tdd` Commands
+The phase auto-advances to REFACTOR when the extension detects a passing test signal.
 
-- `/tdd status`: show current phase, test status, and cycle count
-- `/tdd spec`: engage TDD and switch to `SPEC`
-- `/tdd red`: engage TDD and switch to `RED`
-- `/tdd green`: engage TDD and switch to `GREEN`
-- `/tdd refactor`: engage TDD and switch to `REFACTOR`
-- `/tdd spec-set "Criterion 1" "Criterion 2"`: store the feature spec checklist
-- `/tdd spec-show`: show the active spec checklist
-- `/tdd spec-done`: mark the current spec item complete
-- `/tdd preflight`: run the pre-flight review on the current spec checklist
-- `/tdd postflight`: run the post-flight review on the current cycle
-- `/tdd history`: show phase transitions
-- `/tdd engage` (alias `/tdd on`): engage TDD without changing phase
-- `/tdd disengage` (alias `/tdd off`): disengage TDD for investigation/navigation (runs post-flight first if eligible)
+### REFACTOR
 
-Legacy `/tdd plan`, `/tdd plan-set`, `/tdd plan-show`, and `/tdd plan-done` aliases still work for compatibility.
+Improve naming, readability, duplication, and structure without changing behavior. Run tests to confirm the refactor preserved the spec.
 
-## Agent Tools
+By default, REFACTOR does not auto-advance. Start the next cycle with `/tdd red` or let the agent call `tdd_engage(phase: "RED")`.
 
-The extension registers four LLM-callable tools so the agent can manage TDD on its own:
+### Phase diagram
 
-- `tdd_engage(phase?, reason)`: engage the gate at the start of feature or bug-fix work. `phase` defaults to `SPEC`; pass `RED` if acceptance criteria are already clear enough to write the first failing test. Pre-flight runs automatically when entering `RED` and blocks the transition if the spec checklist is weak.
-- `tdd_disengage(reason)`: disengage when leaving feature work. Post-flight runs automatically when there is a spec checklist and a recent passing test run, surfacing any gaps before the gate releases.
-- `tdd_preflight(userStory?)`: run the pre-flight review on the current spec checklist explicitly. Normally not needed — pre-flight fires on its own when transitioning into `RED`.
-- `tdd_postflight(userStory?)`: run the post-flight review on the current cycle explicitly. Normally not needed — post-flight fires on its own when disengaging.
+```
+SPEC --[preflight passes]--> RED --[test fails]--> GREEN --[test passes]--> REFACTOR
+                              ^                                                |
+                              |________________[user / agent]__________________|
+```
 
-The agent is instructed to call these via the tool's prompt guidelines. You generally do not need to call them yourself — they exist so natural-language workflows can flow without slash-command interruptions.
+## Slash commands
 
-## Recommended Workflow
+All commands are available via `/tdd` inside a Pi session.
 
-For people new to both Pi and TDD, this is the simplest usable loop:
+| Command | Description |
+|---------|-------------|
+| `/tdd status` | Show current phase, test status, and cycle count |
+| `/tdd spec` | Engage TDD and switch to SPEC |
+| `/tdd red` | Engage TDD and switch to RED |
+| `/tdd green` | Engage TDD and switch to GREEN |
+| `/tdd refactor` | Engage TDD and switch to REFACTOR |
+| `/tdd spec-set "Criterion 1" "Criterion 2"` | Store the feature spec checklist |
+| `/tdd spec-show` | Show the active spec checklist |
+| `/tdd spec-done` | Mark the current spec item complete |
+| `/tdd preflight` | Run the preflight review on the current spec |
+| `/tdd postflight` | Run the postflight review on the current cycle |
+| `/tdd engage` | Engage TDD without changing phase (alias: `/tdd on`) |
+| `/tdd disengage` | Disengage TDD (alias: `/tdd off`). Runs postflight if eligible |
+| `/tdd history` | Show phase transition history |
 
-1. Start by writing down the user story and the acceptance criteria.
-2. Use `SPEC` when needed to turn the request and acceptance criteria into concrete test cases.
-3. Move to `RED` and ask the agent to write one failing test for one acceptance criterion.
-   Pick the right proof level: unit for isolated logic, integration when the behavior crosses a boundary or contract.
-4. Run the test and confirm it fails for the expected reason.
-5. Let the agent make the smallest possible code change.
-6. Run the test again and confirm it passes.
-7. Use `REFACTOR` only for cleanup that keeps the same behavior.
-8. Use `/tdd red` to begin the next acceptance criterion.
+Phase commands (`/tdd spec`, `/tdd red`, etc.) both engage TDD and switch to that phase, so they work whether TDD is dormant or already active.
 
-If the agent tries to jump ahead, the gate is there to slow it down on purpose.
+## Agent tools
 
-If you cannot explain what user need the feature serves and how to tell when it is done, stop before `RED`. Otherwise you are likely testing the wrong thing.
+The extension registers four tools the agent can call directly, so natural-language workflows can proceed without slash-command interruptions:
 
-## Configuration
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `tdd_engage` | `phase?` (SPEC or RED, default SPEC), `reason` | Engage TDD for feature or bug-fix work. Preflight runs automatically when entering RED |
+| `tdd_disengage` | `reason` | Disengage TDD. Postflight runs automatically when eligible |
+| `tdd_preflight` | `userStory?` | Run the preflight review explicitly |
+| `tdd_postflight` | `userStory?` | Run the postflight review explicitly |
 
-Configure `pi-tdd` in either:
+The agent is instructed via tool prompt guidelines to call `tdd_engage` at the start of feature work and `tdd_disengage` when leaving it. You generally do not need to call these tools yourself.
 
-- `~/.pi/agent/settings.json` for global defaults
-- `.pi/settings.json` for project-local settings
+## Reviews
 
-Example:
+Two LLM-backed reviews run at cycle boundaries. They fire automatically -- you do not need to trigger them unless you want an ad-hoc check.
 
-```json
+### Preflight (priming)
+
+Runs when transitioning from SPEC into RED (or when engaging directly into RED with a spec set). Validates that the spec checklist is testable, unambiguous, and complete enough to drive a clean TDD cycle.
+
+**Blocks entry to RED on failure.** The agent must refine the spec and try again.
+
+### Postflight (proving)
+
+Runs on disengage (via `tdd_disengage`, `/tdd disengage`, or a `disengageOnTools` lifecycle hook). Validates that every spec item has a corresponding passing test and that the implementation matches what the spec asked for.
+
+**Surfaces gaps but does not block.** The agent and user can decide whether to re-engage and address the gaps.
+
+Postflight only runs when there is real evidence to review: TDD was engaged, a spec was set, and the most recent test run passed with captured output.
+
+### Review model resolution
+
+Reviews use LLM calls. The model is resolved in this order:
+
+1. **Per-review override**: `reviewModels.preflight` or `reviewModels.postflight`
+2. **Top-level default**: `reviewProvider` + `reviewModel`
+3. **Active session model**: whatever model the Pi session is currently using
+
+This lets you route preflight to a fast model (e.g., Gemini Flash) and postflight to a more thorough one (e.g., Claude Sonnet) while using your session model as the fallback.
+
+## Recommended workflow
+
+### For people new to TDD
+
+1. State the user story and acceptance criteria clearly in your prompt.
+2. Let the agent engage into SPEC and translate your request into a numbered spec checklist.
+3. Review the spec. Refine anything vague or untestable.
+4. Move to RED. The agent writes one failing test for one acceptance criterion.
+5. Confirm the test fails for the expected reason.
+6. Let the agent write the smallest code change to make the test pass.
+7. Confirm the test passes.
+8. Use REFACTOR for cleanup that preserves behavior.
+9. Start the next RED cycle for the next acceptance criterion.
+
+If you cannot explain what user need the feature serves and how to tell when it is done, stop before RED. You are likely to test the wrong thing.
+
+### For experienced TDD practitioners
+
+Engage directly into RED when criteria are clear:
+
+```text
+/tdd red
+```
+
+Or let the agent do it:
+
+```text
+Add rate limiting to the /api/search endpoint. 100 requests per minute per API key, 429 response with Retry-After header when exceeded.
+```
+
+The agent will call `tdd_engage(phase: "RED")`, write the failing test, implement, refactor, and disengage when done.
+
+## Configuration reference
+
+Configure `pi-tdd` via the `tddGate` key in Pi settings files:
+
+- **Global**: `~/.pi/agent/settings.json`
+- **Project**: `.pi/settings.json` (overrides global; both layers are deep-merged)
+
+All fields are optional. Defaults are shown below:
+
+```jsonc
 {
   "tddGate": {
-    "enabled": true,
-    "defaultEngaged": false,
-    "startInSpecMode": true,
-    "persistPhase": true,
-    "autoTransition": true,
-    "refactorTransition": "user",
-    "allowReadInAllPhases": true,
-    "temperature": 0,
-    "maxDiffsInContext": 5,
-    "engageOnTools": [
-      "mcp__manifest__start_feature"
-    ],
-    "disengageOnTools": [
-      "mcp__manifest__complete_feature"
-    ]
+    // Core behavior
+    "enabled": true,                    // false disables the extension entirely
+    "defaultEngaged": false,            // true = auto-engage on every session start
+    "startInSpecMode": false,           // true = engage into SPEC instead of RED
+    "autoTransition": true,             // auto-advance phases on test signals
+    "refactorTransition": "user",       // "user" | "agent" | "timeout"
+    "allowReadInAllPhases": true,       // allow read tools in SPEC phase
+    "persistPhase": true,               // persist phase in session log
+
+    // Review settings
+    "runPreflightOnRed": true,          // run preflight before entering RED
+    "temperature": 0,                   // LLM temperature for reviews
+    "maxDiffsInContext": 5,             // max diffs sent to postflight
+
+    // Default review model (applies to all reviews)
+    "reviewProvider": null,             // e.g. "anthropic", "google"
+    "reviewModel": null,                // e.g. "claude-haiku-4-5-20251001"
+
+    // Per-review model overrides
+    "reviewModels": {
+      "preflight": {
+        "provider": "google",
+        "model": "gemini-2.5-flash"
+      },
+      "postflight": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-20250514"
+      }
+    },
+
+    // Lifecycle hooks
+    "engageOnTools": [],                // tool names that auto-engage TDD
+    "disengageOnTools": [],             // tool names that auto-disengage TDD
+
+    // Phase-specific prompt guidelines (override built-in prompts)
+    "guidelines": {
+      "spec": null,
+      "red": null,
+      "green": null,
+      "refactor": null,
+      "universal": null,
+      "security": null
+    }
   }
 }
 ```
 
-Useful options:
+### Key options explained
 
-- `defaultEngaged`: if `true`, every fresh session starts with TDD engaged (legacy always-on behavior). Default `false` — sessions start dormant and only engage on `tdd_engage`, an `engageOnTools` hook, or an explicit `/tdd` phase command.
-- `startInSpecMode`: when TDD engages, begin in `SPEC` instead of `RED`
-- `engageOnTools`: list of tool names that auto-engage TDD when the agent calls them. Useful for hooking task or feature management tools (e.g., manifest's `start_feature`, a Linear `start_issue` tool) into the TDD lifecycle without relying on the agent to remember `tdd_engage`.
-- `disengageOnTools`: list of tool names that auto-disengage TDD. Pair with `engageOnTools` to close out a feature lifecycle (e.g., manifest's `complete_feature`).
-- `persistPhase`: keep the phase state in the Pi session history (engagement is intentionally not persisted across sessions; every session starts dormant)
-- `autoTransition`: allow the extension to move phases from observed test signals
-- `refactorTransition`: choose how `REFACTOR -> RED` happens; default is `"user"`
-- `reviewProvider` and `reviewModel`: use a specific model for the pre-flight and post-flight reviews instead of the current active model (legacy `judgeProvider` / `judgeModel` keys are still accepted)
-- `runPreflightOnRed`: if `true` (default), pre-flight runs automatically when transitioning into `RED` and blocks the transition on failure
-- `guidelines`: override or supply custom spec, test, implementation, refactor, universal, and security guidance blocks. The built-in defaults stay focused on TDD workflow; broader coding preferences should come from the repository's instructions (for example `AGENTS.md`) or your own system prompt.
+**`defaultEngaged`** -- If `true`, every fresh session starts with TDD engaged (legacy always-on behavior). Default `false`: sessions start dormant and only engage on `tdd_engage`, a lifecycle hook, or an explicit `/tdd` phase command.
 
-Legacy `startInPlanMode` and `guidelines.plan` are still accepted for compatibility, but `startInSpecMode` and `guidelines.spec` are the preferred names.
+**`startInSpecMode`** -- When TDD engages, begin in SPEC instead of RED. Useful when you want the agent to always translate requests into a spec before writing tests.
 
-## Local Development
+**`engageOnTools` / `disengageOnTools`** -- Auto-engage or disengage TDD when specific tools are called. Hook task-management tools into the TDD lifecycle without relying on the agent to remember `tdd_engage`:
 
-If you want to work on this extension itself:
+```json
+{
+  "tddGate": {
+    "engageOnTools": ["mcp__manifest__start_feature"],
+    "disengageOnTools": ["mcp__manifest__complete_feature"]
+  }
+}
+```
+
+**`refactorTransition`** -- Controls how REFACTOR advances to the next RED cycle. `"user"` (default) requires an explicit command or tool call. `"agent"` lets the agent advance on its own.
+
+**`guidelines`** -- Override the built-in phase prompts with your own. Set a key to a string to replace the default, or `null` to keep the built-in. The built-in prompts focus on TDD workflow only; broader coding preferences belong in your `AGENTS.md` (see [below](#coding-guidelines-are-separate)).
+
+### Test signal detection
+
+The extension automatically recognizes test commands from common test runners and uses their output to detect pass/fail signals:
+
+`npm test`, `pnpm test`, `yarn test`, `bun test`, `npx vitest`, `npx jest`, `pytest`, `cargo test`, `go test`, `deno test`, `rspec`, `dotnet test`, `make test`, `zig test`, and scripts matching `./scripts/test*` or similar patterns.
+
+Test output is parsed for standard pass/fail patterns. When a command pipes through `|| true` (a common pattern to prevent shell exit on failure), the extension falls back to output pattern matching instead of relying on the exit code.
+
+### Phase persistence
+
+Phase state is written to the Pi session log as a custom entry. Within-session navigation (branching the session tree) preserves the phase state. New sessions always start dormant regardless of what was persisted, unless `defaultEngaged: true` is set.
+
+### Backwards-compatible aliases
+
+The codebase accepts these deprecated names for compatibility:
+
+| Deprecated | Current |
+|-----------|---------|
+| `startInPlanMode` | `startInSpecMode` |
+| `judgeProvider` / `judgeModel` | `reviewProvider` / `reviewModel` |
+| `guidelines.plan` | `guidelines.spec` |
+| `/tdd plan` | `/tdd spec` |
+
+## Coding guidelines are separate
+
+`pi-tdd` focuses on TDD workflow. It does not inject coding style rules, tech stack preferences, or architectural conventions. Those belong in your Pi context files:
+
+- **Global** (all projects): `~/.pi/agent/AGENTS.md`
+- **Per-project**: `AGENTS.md` or `CLAUDE.md` in the project root
+
+Pi loads and concatenates all matching files automatically. Put your coding standards, preferred frameworks, naming conventions, and project-specific rules there. The TDD phase prompts work alongside them without overlap or conflict.
+
+## Local development
+
+To work on this extension itself:
 
 ```bash
 git clone git@github.com:manifestdocs/pi-tdd.git
 cd pi-tdd
 npm install
-npm run pi:install
+npm run build              # tsc -> dist/
+npm test                   # vitest (one shot)
+npm run watch              # tsc --watch
+npm run pi:install         # build + install into .pi/settings.json
+npm run pi:install:global  # build + install into ~/.pi/agent/settings.json
 ```
 
-`npm run pi:install` builds the package and installs the current working tree into the local project's `.pi/settings.json`.
+After `pi:install`, run `/reload` inside Pi to pick up the new build.
 
-For a user-scope install instead:
+There is no lint script. Type checking happens through `tsc` with strict mode.
 
-```bash
-npm run pi:install:global
-```
+### Architecture at a glance
 
-That writes to `~/.pi/agent/settings.json`.
-
-Because this repository declares a Pi package manifest, Pi can load it directly from the current directory, a local path, or from Git.
+- **`PhaseStateMachine`** (`src/phase.ts`) is the single source of mutable state. Phase, engagement flag, spec checklist, cycle count, test signals, and a rolling diff buffer all live here.
+- **`src/index.ts`** is the extension entry point. It builds the machine, registers tools and commands, and wires Pi events to the right modules.
+- **`src/gate.ts`** enforces one deterministic rule: SPEC blocks file mutations. All other phases are passthrough that record diffs for review context.
+- **`src/transition.ts`** converts bash tool results into pass/fail test signals and drives phase transitions.
+- **`src/preflight.ts`** and **`src/postflight.ts`** implement the LLM-backed reviews at cycle boundaries.
+- **`src/engagement.ts`** implements the engage/disengage tools and lifecycle hooks.
+- **`prompts/*.md`** contains all prompt text as editable markdown files.
 
 ## Limits
 
-This package improves discipline. It does not replace judgment.
+This extension improves discipline. It does not replace judgment.
 
 - A passing test can still be a weak test.
 - An LLM review can still make a bad call.
 - Overrides are sometimes necessary.
+- The gate is deliberately lenient outside of SPEC -- it steers via the system prompt rather than blocking tool calls, because over-blocking disrupts natural agent flow.
 
 The goal is not perfect enforcement. The goal is to make agent behavior more test-driven, more observable, and harder to let drift into unsupported code changes.
+
+## License
+
+MIT
