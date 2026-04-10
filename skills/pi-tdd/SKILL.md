@@ -11,7 +11,7 @@ Use this skill when the task is being handled inside `pi-tdd` or when the user w
 
 `pi-tdd` is not just about "write a failing test first". Its value comes from making sure the requested feature is translated into testable behavior before implementation starts.
 
-Use `SPEC` as an optional preflight step when the user's request is still too fuzzy to test well.
+Use `SPEC` as an optional preflight step when the user's request can't yet be translated directly into a failing test — the user story, expected behavior, or acceptance criteria need to be pinned down first.
 
 ## SPEC Workflow
 
@@ -47,14 +47,15 @@ If you cannot explain the user-visible behavior and the acceptance criteria, do 
 
 ### GREEN
 
-- Make the minimum code change needed to satisfy the failing test.
-- Avoid refactors, abstractions, and unrelated cleanup.
+- Write the smallest correct code for the behavior the failing test asserts.
+- Correctness comes first, but no gold-plating, refactors, or unrelated cleanup — save polish and abstractions for REFACTOR.
 
 ### REFACTOR
 
-- Improve structure without changing behavior.
-- Keep the relevant tests passing.
-- Do not expand scope.
+- Refine the code from this cycle: naming, readability, duplication, structure.
+- Align with the project's coding guidelines and the patterns used in the broader codebase — the new code should look like it belongs.
+- If a test breaks, you changed behavior — revert and try a different approach.
+- Stay scoped to this cycle's work.
 
 ## Command Surface
 

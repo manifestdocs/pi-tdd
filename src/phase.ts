@@ -150,7 +150,7 @@ export class PhaseStateMachine {
       case "RED":
         return "Write or modify tests. Run tests to confirm failure. Read any file.";
       case "GREEN":
-        return "Write the minimum implementation to pass the failing test. Run tests.";
+        return "Write the smallest correct implementation to pass the failing test. Run tests.";
       case "REFACTOR":
         return "Restructure, rename, extract. Run tests to confirm behavior stays the same.";
     }
