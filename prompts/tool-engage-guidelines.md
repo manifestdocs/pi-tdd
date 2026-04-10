@@ -1,0 +1,4 @@
+- Call tdd_engage at the start of any feature or bug-fix work, before any code changes. Use phase='SPEC' if requirements need clarification, phase='RED' if you can write the first failing test immediately.
+- Do NOT engage TDD for investigation, navigation, branch management, code review, or research. Stay dormant for non-feature work.
+- When transitioning into RED, the pre-flight gate runs automatically and validates the spec checklist. If pre-flight fails, refine the spec before retrying.
+- Call tdd_disengage when feature work is finished — post-flight will run automatically to verify the work delivered what was asked.

@@ -8,10 +8,15 @@ import type { PhaseStateMachine } from "./phase.js";
 import { persistState } from "./persistence.js";
 import { formatPreflightResult, runPreflight, shouldRunPreflightOnRedEntry } from "./preflight.js";
 import { formatPostflightResult, runPostflight, type PostflightResult } from "./postflight.js";
+import { loadPrompt, loadPromptList } from "./prompt-loader.js";
 import { POSTFLIGHT_TOOL_NAME, PREFLIGHT_TOOL_NAME } from "./review-tools.js";
 import type { TDDConfig, TDDPhase } from "./types.js";
 
 const STATUS_KEY = "tdd-gate";
+const ENGAGE_PROMPT_SNIPPET = loadPrompt("tool-engage-snippet");
+const ENGAGE_PROMPT_GUIDELINES = loadPromptList("tool-engage-guidelines");
+const DISENGAGE_PROMPT_SNIPPET = loadPrompt("tool-disengage-snippet");
+const DISENGAGE_PROMPT_GUIDELINES = loadPromptList("tool-disengage-guidelines");
 
 export const ENGAGE_TOOL_NAME = "tdd_engage";
 export const DISENGAGE_TOOL_NAME = "tdd_disengage";
@@ -178,14 +183,8 @@ export function createEngageTool(
     description:
       "Engage the TDD phase gate for feature or bug-fix work. Call this at the start of any work that introduces, modifies, or fixes user-visible behavior. " +
       "Pass phase='SPEC' when the request still needs to be translated into testable acceptance criteria, or phase='RED' when criteria are already clear enough to write the first failing test. Defaults to SPEC.",
-    promptSnippet:
-      "Engage TDD enforcement before starting a feature or bug fix.",
-    promptGuidelines: [
-      "Call tdd_engage at the start of any feature or bug-fix work, before any code changes. Use phase='SPEC' if requirements need clarification, phase='RED' if you can write the first failing test immediately.",
-      "Do NOT engage TDD for investigation, navigation, branch management, code review, or research. Stay dormant for non-feature work.",
-      "When transitioning into RED, the pre-flight gate runs automatically and validates the spec checklist. If pre-flight fails, refine the spec before retrying.",
-      "Call tdd_disengage when feature work is finished — post-flight will run automatically to verify the work delivered what was asked.",
-    ],
+    promptSnippet: ENGAGE_PROMPT_SNIPPET,
+    promptGuidelines: ENGAGE_PROMPT_GUIDELINES,
     parameters: Type.Object({
       phase: Type.Optional(
         Type.String({
@@ -266,12 +265,8 @@ export function createDisengageTool(
     label: "Disengage TDD",
     description:
       "Disengage the TDD phase gate when leaving feature or bug-fix work. Call this when switching to investigation, navigation, code review, or any non-feature task so subsequent tool calls are not judged against TDD phase rules.",
-    promptSnippet: "Disengage TDD enforcement when leaving feature work.",
-    promptGuidelines: [
-      "Call tdd_disengage when feature or bug-fix work is finished, or when switching to investigation, branch navigation, or unrelated tasks.",
-      "When disengaging from a feature with passing tests and a spec checklist, post-flight runs automatically and reviews whether the work delivered what was asked. Read the post-flight result before treating the feature as truly done.",
-      "Stay disengaged until you start the next feature or bug fix.",
-    ],
+    promptSnippet: DISENGAGE_PROMPT_SNIPPET,
+    promptGuidelines: DISENGAGE_PROMPT_GUIDELINES,
     parameters: Type.Object({
       reason: Type.String({
         description: "Brief reason for disengaging (e.g. 'feature complete', 'switching to investigation')",

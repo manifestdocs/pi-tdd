@@ -6,9 +6,14 @@ import type {
 import type { EngagementDeps } from "./engagement.js";
 import { formatPreflightResult, runPreflight, type PreflightResult } from "./preflight.js";
 import { formatPostflightResult, runPostflight, type PostflightResult } from "./postflight.js";
+import { loadPrompt, loadPromptList } from "./prompt-loader.js";
 
 export const PREFLIGHT_TOOL_NAME = "tdd_preflight";
 export const POSTFLIGHT_TOOL_NAME = "tdd_postflight";
+const PREFLIGHT_PROMPT_SNIPPET = loadPrompt("tool-preflight-snippet");
+const PREFLIGHT_PROMPT_GUIDELINES = loadPromptList("tool-preflight-guidelines");
+const POSTFLIGHT_PROMPT_SNIPPET = loadPrompt("tool-postflight-snippet");
+const POSTFLIGHT_PROMPT_GUIDELINES = loadPromptList("tool-postflight-guidelines");
 
 interface PreflightParams {
   userStory?: string;
@@ -26,12 +31,8 @@ export function createPreflightTool(
     label: "TDD Pre-flight",
     description:
       "Run the TDD pre-flight check (priming the cycle). Validates the spec checklist is solid enough to drive a clean RED → GREEN → REFACTOR cycle BEFORE any tests or implementation are written. Call this when leaving SPEC for RED if you want to verify the spec is testable, atomic, and covers the user story.",
-    promptSnippet: "Inspect the pre-flight verdict on the current spec.",
-    promptGuidelines: [
-      "Pre-flight runs AUTOMATICALLY when transitioning into RED via tdd_engage(phase: 'RED') or /tdd red. You normally do NOT need to call this tool yourself.",
-      "Call tdd_preflight directly only when you want to inspect the spec checklist mid-flow without attempting a phase transition (for example, after editing the spec to verify it's now solid).",
-      "If pre-flight returns issues, refine the spec checklist (via /tdd spec-set or by editing the items) before retrying RED.",
-    ],
+    promptSnippet: PREFLIGHT_PROMPT_SNIPPET,
+    promptGuidelines: PREFLIGHT_PROMPT_GUIDELINES,
     parameters: Type.Object({
       userStory: Type.Optional(
         Type.String({
@@ -76,13 +77,8 @@ export function createPostflightTool(
     label: "TDD Post-flight",
     description:
       "Run the TDD post-flight review (proving the cycle). Validates that the completed TDD cycle delivered what the spec asked for: every spec item has a passing test, the implementation matches the behavior the spec describes, and there are no obvious gaps or feature creep. Call this when tests are green and you believe the cycle is complete.",
-    promptSnippet: "Inspect the post-flight verdict on the current cycle.",
-    promptGuidelines: [
-      "Post-flight runs AUTOMATICALLY when you call tdd_disengage on a feature with passing tests and a spec checklist. You normally do NOT need to call this tool yourself — just disengage when the feature is done.",
-      "Call tdd_postflight directly only when you want a mid-feature checkpoint (for example, after one TDD cycle, before starting the next) to verify the work so far.",
-      "If post-flight surfaces gaps, decide whether to run another RED → GREEN cycle to address them or to accept the work and disengage.",
-      "Do NOT call tdd_postflight while tests are failing or mid-cycle — it only checks completed work.",
-    ],
+    promptSnippet: POSTFLIGHT_PROMPT_SNIPPET,
+    promptGuidelines: POSTFLIGHT_PROMPT_GUIDELINES,
     parameters: Type.Object({
       userStory: Type.Optional(
         Type.String({
