@@ -5,9 +5,33 @@ import { splitCommandArgs } from "./commands.js";
 
 const BARE_TEST_BINARIES = new Set(["pytest", "vitest", "rspec", "jest", "mocha"]);
 const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh"]);
+const TRUTHY_NO_OP_COMMANDS = new Set(["true", ":"]);
+const FAILURE_OUTPUT_PATTERNS = [
+  /\b[1-9]\d*\s+failed\b/i,
+  /\b[1-9]\d*\s+failures?\b/i,
+  /\b[1-9]\d*\s+errors?\b/i,
+  /\btest result:\s*failed\b/i,
+  /^fail(?:\s|$)/im,
+  /^failed\b/im,
+  /\berror:\s+test failed\b/i,
+];
+const PASS_OUTPUT_PATTERNS = [
+  /\b0\s+failed\b/i,
+  /\b0\s+failures?\b/i,
+  /\b0\s+errors?\b/i,
+  /\btest result:\s*ok\b/i,
+  /\b[1-9]\d*\s+passed\b/i,
+];
+
+type CommandOperator = "&&" | "||" | ";" | "|" | null;
+
+interface CommandClause {
+  text: string;
+  nextOperator: CommandOperator;
+}
 
 export function isTestCommand(command: string): boolean {
-  return splitCommandClauses(command).some(isTestCommandClause);
+  return splitCommandClauses(command).some((clause) => isTestCommandClause(clause.text));
 }
 
 export function extractTestSignal(event: ToolResultEvent): TestSignal | null {
@@ -16,7 +40,8 @@ export function extractTestSignal(event: ToolResultEvent): TestSignal | null {
   }
 
   const command = typeof event.input.command === "string" ? event.input.command : "";
-  if (!isTestCommand(command)) {
+  const clauses = splitCommandClauses(command);
+  if (!clauses.some((clause) => isTestCommandClause(clause.text))) {
     return null;
   }
 
@@ -24,11 +49,15 @@ export function extractTestSignal(event: ToolResultEvent): TestSignal | null {
     .filter((content): content is { type: "text"; text: string } => content.type === "text")
     .map((content) => content.text)
     .join("\n");
+  const failed = inferTestFailure(clauses, output, event.isError);
+  if (failed === null) {
+    return null;
+  }
 
   return {
     command,
     output,
-    failed: event.isError,
+    failed,
   };
 }
 
@@ -38,12 +67,16 @@ export async function evaluateTransition(
   config: TDDConfig,
   ctx: ExtensionContext
 ): Promise<void> {
-  if (!config.enabled || !machine.enabled || !config.autoTransition) {
+  if (!config.enabled || !machine.enabled) {
     return;
   }
 
   for (const signal of signals) {
     machine.recordTestResult(signal.output, signal.failed);
+  }
+
+  if (!config.autoTransition) {
+    return;
   }
 
   if (machine.phase === "SPEC") {
@@ -104,6 +137,52 @@ export function fallbackTransition(
     transition: null,
     reason: "No deterministic transition signal was found.",
   };
+}
+
+function inferTestFailure(
+  clauses: CommandClause[],
+  output: string,
+  isError: boolean
+): boolean | null {
+  if (isError) {
+    return true;
+  }
+
+  if (!hasMaskedFailureFallback(clauses)) {
+    return false;
+  }
+
+  if (matchesAnyPattern(output, FAILURE_OUTPUT_PATTERNS)) {
+    return true;
+  }
+  if (matchesAnyPattern(output, PASS_OUTPUT_PATTERNS)) {
+    return false;
+  }
+  return null;
+}
+
+function hasMaskedFailureFallback(clauses: CommandClause[]): boolean {
+  for (let i = 0; i < clauses.length - 1; i++) {
+    if (clauses[i].nextOperator !== "||") {
+      continue;
+    }
+    if (!isTestCommandClause(clauses[i].text)) {
+      continue;
+    }
+    if (isTruthyNoOpClause(clauses[i + 1].text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isTruthyNoOpClause(clause: string): boolean {
+  const [firstToken] = splitCommandArgs(clause);
+  return firstToken ? TRUTHY_NO_OP_COMMANDS.has(commandName(firstToken)) : false;
+}
+
+function matchesAnyPattern(value: string, patterns: readonly RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(value));
 }
 
 function isTestCommandClause(clause: string): boolean {
@@ -177,8 +256,8 @@ function commandName(token: string): string {
   return parts[parts.length - 1] ?? normalized;
 }
 
-function splitCommandClauses(command: string): string[] {
-  const clauses: string[] = [];
+function splitCommandClauses(command: string): CommandClause[] {
+  const clauses: CommandClause[] = [];
   let current = "";
   let quote: '"' | "'" | null = null;
   let escape = false;
@@ -214,14 +293,14 @@ function splitCommandClauses(command: string): string[] {
     }
 
     if ((ch === "&" && next === "&") || (ch === "|" && next === "|")) {
-      pushClause(clauses, current);
+      pushClause(clauses, current, `${ch}${next}` as CommandOperator);
       current = "";
       i++;
       continue;
     }
 
     if (ch === ";" || ch === "|") {
-      pushClause(clauses, current);
+      pushClause(clauses, current, ch as CommandOperator);
       current = "";
       continue;
     }
@@ -229,13 +308,13 @@ function splitCommandClauses(command: string): string[] {
     current += ch;
   }
 
-  pushClause(clauses, current);
+  pushClause(clauses, current, null);
   return clauses;
 }
 
-function pushClause(clauses: string[], clause: string): void {
+function pushClause(clauses: CommandClause[], clause: string, nextOperator: CommandOperator): void {
   const trimmed = clause.trim();
   if (trimmed) {
-    clauses.push(trimmed);
+    clauses.push({ text: trimmed, nextOperator });
   }
 }

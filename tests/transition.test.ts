@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { fallbackTransition, extractTestSignal, isTestCommand } from "../src/transition.ts";
+import { fallbackTransition, evaluateTransition, extractTestSignal, isTestCommand } from "../src/transition.ts";
 import { PhaseStateMachine } from "../src/phase.ts";
+import { resolveGuidelines } from "../src/guidelines.ts";
+import type { TDDConfig } from "../src/types.ts";
+
+function makeConfig(overrides: Partial<TDDConfig> = {}): TDDConfig {
+  return {
+    enabled: true,
+    reviewModel: null,
+    reviewProvider: null,
+    autoTransition: true,
+    refactorTransition: "user",
+    allowReadInAllPhases: true,
+    temperature: 0,
+    maxDiffsInContext: 5,
+    persistPhase: false,
+    startInSpecMode: false,
+    defaultEngaged: false,
+    runPreflightOnRed: true,
+    engageOnTools: [],
+    disengageOnTools: [],
+    guidelines: resolveGuidelines({}),
+    ...overrides,
+  };
+}
+
+function makeContext() {
+  return {
+    hasUI: false,
+    ui: {
+      notify() {},
+      setStatus() {},
+    },
+  } as never;
+}
 
 describe("isTestCommand", () => {
   it("detects common package manager test commands", () => {
@@ -53,6 +86,36 @@ describe("extractTestSignal", () => {
 
     expect(signal).toBeNull();
   });
+
+  it("treats masked failing test output as a failure signal", () => {
+    const signal = extractTestSignal({
+      toolName: "bash",
+      input: { command: "npm test || true" },
+      content: [{ type: "text", text: "1 failed" }],
+      isError: false,
+    } as never);
+
+    expect(signal).toEqual({
+      command: "npm test || true",
+      output: "1 failed",
+      failed: true,
+    });
+  });
+
+  it("treats masked passing test output as a passing signal", () => {
+    const signal = extractTestSignal({
+      toolName: "bash",
+      input: { command: "npm test || true" },
+      content: [{ type: "text", text: "1 passed" }],
+      isError: false,
+    } as never);
+
+    expect(signal).toEqual({
+      command: "npm test || true",
+      output: "1 passed",
+      failed: false,
+    });
+  });
 });
 
 describe("fallbackTransition", () => {
@@ -76,5 +139,22 @@ describe("fallbackTransition", () => {
     );
 
     expect(verdict.transition).toBe("REFACTOR");
+  });
+});
+
+describe("evaluateTransition", () => {
+  it("records the last test result even when auto-transition is disabled", async () => {
+    const machine = new PhaseStateMachine({ enabled: true, phase: "GREEN" });
+
+    await evaluateTransition(
+      [{ command: "npm test", output: "1 passed", failed: false }],
+      machine,
+      makeConfig({ autoTransition: false }),
+      makeContext()
+    );
+
+    expect(machine.phase).toBe("GREEN");
+    expect(machine.lastTestFailed).toBe(false);
+    expect(machine.lastTestOutput).toBe("1 passed");
   });
 });
