@@ -65,13 +65,19 @@ If Pi is already running, run `/reload` inside the session to pick up the extens
 
 ### 3. Use it
 
-Inside a Pi session:
+Just ask the agent to work on a feature or fix a bug. The extension nudges the agent to call `tdd_start` automatically when the task involves new behavior or a bug fix:
+
+```
+Fix the off-by-one error in pagination
+```
+
+The agent enables TDD, writes a failing test, implements the fix, refactors, and calls `tdd_done` when finished.
+
+You can also toggle TDD manually with the slash command:
 
 ```
 /tdd
 ```
-
-That's it. TDD mode activates and the agent enters the SPECIFYING phase. Write a failing test, make it pass, refactor, repeat. Run `/tdd` again to turn it off.
 
 ## What is TDD?
 
@@ -102,7 +108,15 @@ The result is smaller diffs, better reviewability, and fewer ungrounded changes.
 
 ## How it works
 
-`/tdd` is a toggle. First invocation enables TDD mode and enters SPECIFYING. Second invocation disables it.
+The extension provides two agent tools and a manual toggle:
+
+| Interface | Description |
+|-----------|-------------|
+| `tdd_start` | Agent tool — enables TDD mode |
+| `tdd_done` | Agent tool — disables TDD mode when work is complete |
+| `/tdd` | Slash command — manual toggle for user override |
+
+When TDD is off, the extension injects a system prompt nudge telling the agent that TDD is available for feature and bug fix work. The agent decides whether the current task warrants it — no keyword heuristics.
 
 When TDD is active, the extension:
 
