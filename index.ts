@@ -202,7 +202,7 @@ export default function tddExtension(pi: ExtensionAPI) {
 				const maxTests = 7;
 				const shown = snap.summary.tests.slice(0, maxTests);
 				for (const t of shown) {
-					const icon = t.passed ? theme.fg("success", "\u2713") : theme.fg("error", "\u2717");
+					const icon = t.passed ? theme.fg("success", "\u2714") : theme.fg("error", "\u2717");
 					const name = truncateToWidth(t.name, maxName);
 					lines.push(`  ${icon} ${name}`);
 				}
@@ -354,10 +354,19 @@ export default function tddExtension(pi: ExtensionAPI) {
 			refactoring: "Restructure code freely but keep all tests passing. No new behavior. If a change causes test failure, revert it immediately.",
 		};
 
+		const testOrg = [
+			"TEST ORGANIZATION:",
+			"- One test file per module or unit under test. Split when a file covers a distinct area of behavior.",
+			"- Top-level group (describe/suite) names the unit. Nest context groups for different scenarios (e.g. 'when input is negative', 'with no arguments').",
+			"- Each test describes the expected outcome, not the setup. Prefer 'returns 0 for empty list' over 'test empty list'.",
+			"- Add to an existing test file when the new test covers the same unit. Create a new file when it covers a different one.",
+			"- Test YOUR business logic, not library/framework behavior. If a dependency is already tested independently, don't re-prove it. Assert what your code does with the result, not that the library works.",
+		].join("\n");
+
 		return {
 			systemPrompt:
 				event.systemPrompt +
-				`\n\n[TDD MODE \u2014 ${phase.toUpperCase()} PHASE]\n${guidance[phase]}\nTest command: ${testCommand}`,
+				`\n\n[TDD MODE \u2014 ${phase.toUpperCase()} PHASE]\n${guidance[phase]}\nTest command: ${testCommand}\n\n${testOrg}`,
 		};
 	});
 }
