@@ -83,15 +83,15 @@ Test-driven development is a workflow:
 
 1. Write a test that expresses the next behavior you want.
 2. Run it and confirm it fails.
-3. Write the smallest amount of code that makes it pass.
-4. Refactor without changing behavior.
+3. Write the smallest correct code that makes it pass.
+4. Refactor as necessary without changing behavior.
 5. Repeat.
 
 The test does not have to be a unit test. Use the cheapest test that can prove the behavior.
 
 ## Why this matters for coding agents
 
-Empirical evidence from 2024-2026 shows that providing pre-written tests to LLM agents improves code generation accuracy by 12-46 percentage points across multiple benchmarks and models. The TDFlow paper (2025) found that agents given human-written tests achieved 94.3% resolution on SWE-bench Verified, compared to 69.8% when generating their own tests.
+Empirical evidence from 2024-2026 shows that providing pre-written tests to LLM agents improves code generation accuracy by 12-46 percentage points across multiple benchmarks and models. [TDFlow](https://arxiv.org/abs/2510.23761) (2025) found that agents given human-written tests achieved 94.3% resolution on SWE-bench Verified, compared to 69.8% when generating their own tests.
 
 Without test-driven discipline, coding agents tend to:
 
