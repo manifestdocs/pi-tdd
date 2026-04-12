@@ -2,7 +2,6 @@
 
 A minimal TDD extension for [Pi](https://pi.dev), the terminal coding agent. Enforces **specifying-implementing-refactoring** sequencing when activated via `/tdd`. Off by default. No configuration beyond a test command.
 
-No build step. No configuration files.
 
 ---
 
@@ -246,7 +245,6 @@ This extension improves discipline. It does not replace judgment.
 - The gate only blocks writes in SPECIFYING. IMPLEMENTING and REFACTORING steer via the system prompt rather than blocking tool calls, because over-blocking disrupts natural agent flow.
 - No persistent state between sessions.
 - No LLM-backed reviews -- the extension trusts test results as the source of truth.
-- No configuration files. If the defaults don't fit, modify `src/index.ts` directly.
 
 The goal is not perfect enforcement. The goal is to keep the agent inside a tight feedback loop where tests drive every change.
 
