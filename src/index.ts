@@ -5,29 +5,45 @@
  * Off by default. No configuration beyond a test command.
  */
 
-import {
-  isToolCallEventType,
-  type ExtensionAPI,
-  type ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
-import { truncateToWidth } from "@mariozechner/pi-tui";
-import { Type } from "@sinclair/typebox";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type ExtensionAPI, type ExtensionContext, isToolCallEventType } from "@mariozechner/pi-coding-agent";
+import { truncateToWidth } from "@mariozechner/pi-tui";
+import { Type } from "@sinclair/typebox";
 
-import {
-  type TestSummary,
-  parseTestOutput,
-  formatDuration,
-} from "./parsers.js";
+import { formatDuration, parseTestOutput, type TestSummary } from "./parsers.js";
 
 type Phase = "off" | "specifying" | "implementing" | "refactoring";
 
 // -- File classification ------------------------------------------------------
 
 const TEST_FILE_RE = /\.test\.|\.spec\.|_test\.|_spec\.|\/__tests__\/|\/test\//;
-const CONFIG_FILE_RE =
-  /package\.json$|package-lock\.json$|yarn\.lock$|pnpm-lock\.yaml$|tsconfig.*\.json$|\.eslintrc|\.prettierrc|\.gitignore$|\.env|Cargo\.toml$|Cargo\.lock$|go\.mod$|go\.sum$|pyproject\.toml$|requirements.*\.txt$|Makefile$|Dockerfile|\.ya?ml$|\.toml$|\.ini$|\.cfg$|\.md$/;
+const CONFIG_FILE_RE = new RegExp(
+  [
+    "package\\.json$",
+    "package-lock\\.json$",
+    "yarn\\.lock$",
+    "pnpm-lock\\.yaml$",
+    "tsconfig.*\\.json$",
+    "\\.eslintrc",
+    "\\.prettierrc",
+    "\\.gitignore$",
+    "\\.env",
+    "Cargo\\.toml$",
+    "Cargo\\.lock$",
+    "go\\.mod$",
+    "go\\.sum$",
+    "pyproject\\.toml$",
+    "requirements.*\\.txt$",
+    "Makefile$",
+    "Dockerfile",
+    "\\.ya?ml$",
+    "\\.toml$",
+    "\\.ini$",
+    "\\.cfg$",
+    "\\.md$",
+  ].join("|"),
+);
 
 function isTestFile(filePath: string): boolean {
   return TEST_FILE_RE.test(filePath);
@@ -41,10 +57,7 @@ function isProductionFile(filePath: string): boolean {
   return !isTestFile(filePath) && !isConfigFile(filePath);
 }
 
-function getStringInput(
-  input: Record<string, unknown>,
-  key: string,
-): string | undefined {
+function getStringInput(input: Record<string, unknown>, key: string): string | undefined {
   const val = input[key];
   return typeof val === "string" ? val : undefined;
 }
@@ -83,11 +96,8 @@ function renderWidget(
   const lines: string[] = [];
   const maxName = width - 8;
 
-  const phaseLabel = theme.bold(
-    theme.fg(PHASE_COLORS[snap.phase] ?? "text", snap.phase.toUpperCase()),
-  );
-  const cycleLabel =
-    snap.cycleCount > 0 ? theme.fg("dim", ` cycle ${snap.cycleCount}`) : "";
+  const phaseLabel = theme.bold(theme.fg(PHASE_COLORS[snap.phase] ?? "text", snap.phase.toUpperCase()));
+  const cycleLabel = snap.cycleCount > 0 ? theme.fg("dim", ` cycle ${snap.cycleCount}`) : "";
   lines.push(`${theme.fg("muted", "TDD")} ${phaseLabel}${cycleLabel}`);
 
   if (!snap.summary) {
@@ -96,29 +106,21 @@ function renderWidget(
   }
 
   const parts: string[] = [];
-  if (snap.summary.passed > 0)
-    parts.push(theme.fg("success", `${snap.summary.passed} passed`));
-  if (snap.summary.failed > 0)
-    parts.push(theme.fg("error", `${snap.summary.failed} failed`));
+  if (snap.summary.passed > 0) parts.push(theme.fg("success", `${snap.summary.passed} passed`));
+  if (snap.summary.failed > 0) parts.push(theme.fg("error", `${snap.summary.failed} failed`));
   if (snap.summary.duration) parts.push(theme.fg("dim", snap.summary.duration));
-  if (parts.length > 0) lines.push("  " + parts.join(theme.fg("dim", " | ")));
+  if (parts.length > 0) lines.push(`  ${parts.join(theme.fg("dim", " | "))}`);
 
   const maxTests = 7;
-  const sorted = [...snap.summary.tests].sort(
-    (a, b) => Number(a.passed) - Number(b.passed),
-  );
+  const sorted = [...snap.summary.tests].sort((a, b) => Number(a.passed) - Number(b.passed));
   const shown = sorted.slice(0, maxTests);
   for (const t of shown) {
-    const icon = t.passed
-      ? theme.fg("success", "\u2714")
-      : theme.fg("error", "\u2717");
+    const icon = t.passed ? theme.fg("success", "\u2714") : theme.fg("error", "\u2717");
     const name = truncateToWidth(t.name, maxName);
     lines.push(`  ${icon} ${name}`);
   }
   if (snap.summary.tests.length > maxTests) {
-    lines.push(
-      theme.fg("dim", `  ... ${snap.summary.tests.length - maxTests} more`),
-    );
+    lines.push(theme.fg("dim", `  ... ${snap.summary.tests.length - maxTests} more`));
   }
 
   return lines;
@@ -133,32 +135,70 @@ const TDD_OFF_PROMPT =
   "Do not use TDD for config changes, documentation, scaffolding, or exploratory tasks.";
 
 const PHASE_GUIDANCE: Record<string, string> = {
-  specifying:
-    "Write a failing test FIRST. Do not modify production code until a test exists and fails. Use standard test file naming (*.test.*, *.spec.*, *_test.*, *_spec.*, or files in __tests__/ or test/ directories). Test YOUR business logic, not library/framework behavior. If a dependency is already tested independently, don't re-prove it. Assert what your code does with the result, not that the library works.",
-  implementing:
-    "Write the a MINIMAL and CORRECT production code to make the failing test pass. No extra functionality or refactoring yet.",
-  refactoring:
-    "Restructure code freely but keep all tests passing. No new behavior. If a change causes test failure, revert it immediately. Look for repeated patterns across handlers/functions and extract them. Deduplicate test fixtures and shared setup. When the task is complete and all tests pass, call tdd_done.",
+  specifying: [
+    "Write a failing test FIRST.",
+    "Do not modify production code until a test exists and fails.",
+    "Use standard test file naming",
+    "(*.test.*, *.spec.*, *_test.*, *_spec.*,",
+    "or files in __tests__/ or test/ directories).",
+    "Test YOUR business logic, not library/framework behavior.",
+    "If a dependency is already tested independently,",
+    "don't re-prove it.",
+    "Assert what your code does with the result,",
+    "not that the library works.",
+  ].join(" "),
+  implementing: [
+    "Write a MINIMAL and CORRECT production code solution",
+    "to make the failing test pass.",
+    "No extra functionality or refactoring yet.",
+  ].join(" "),
+  refactoring: [
+    "Restructure code freely but keep all tests passing.",
+    "No new behavior.",
+    "If a change causes test failure, revert it immediately.",
+    "Look for repeated patterns across handlers/functions",
+    "and extract them.",
+    "Deduplicate test fixtures and shared setup.",
+    "When the task is complete and all tests pass,",
+    "call tdd_done.",
+  ].join(" "),
 };
 
 const TEST_ORG_TEXT = [
   "TEST ORGANIZATION:",
-  "- One test file per module or unit under test. Split when a file covers a distinct area of behavior.",
-  "- Top-level group names the unit. Nest sub-groups for distinct scenarios. Keep different behaviors in separate groups rather than combining them into one parameterized block. (e.g. Vitest/Jest: nested describe(); Go: t.Run() subtests; pytest: classes; Rust: mod tests with sub-mods.)",
-  "- Use parameterized/table-driven tests for variations of the SAME behavior (e.g. multiple input-output pairs). Use separate groups for DIFFERENT behaviors (e.g. valid input vs error handling vs edge cases).",
-  "- Each test describes the expected outcome, not the setup. Prefer 'returns 0 for empty list' over 'test empty list'.",
-  "- Add to an existing test file when the new test covers the same unit. Create a new file when it covers a different one.",
-  "- Extract shared test setup (fixtures, helpers, factories) into a common location rather than duplicating across test files. (e.g. Jest/Vitest: shared helper file; pytest: conftest.py; Go: testutil package; RSpec: spec_helper.rb or shared_context.)",
+  "- One test file per module or unit under test." + " Split when a file covers a distinct area of behavior.",
+  "- Top-level group names the unit." +
+    " Nest sub-groups for distinct scenarios." +
+    " Keep different behaviors in separate groups" +
+    " rather than combining them into one parameterized block." +
+    " (e.g. Vitest/Jest: nested describe();" +
+    " Go: t.Run() subtests; pytest: classes;" +
+    " Rust: mod tests with sub-mods.)",
+  "- Use parameterized/table-driven tests for variations" +
+    " of the SAME behavior (e.g. multiple input-output pairs)." +
+    " Use separate groups for DIFFERENT behaviors" +
+    " (e.g. valid input vs error handling vs edge cases).",
+  "- Each test describes the expected outcome, not the setup." +
+    " Prefer 'returns 0 for empty list'" +
+    " over 'test empty list'.",
+  "- Add to an existing test file when the new test" +
+    " covers the same unit." +
+    " Create a new file when it covers a different one.",
+  "- Extract shared test setup (fixtures, helpers, factories)" +
+    " into a common location rather than duplicating" +
+    " across test files." +
+    " (e.g. Jest/Vitest: shared helper file;" +
+    " pytest: conftest.py; Go: testutil package;" +
+    " RSpec: spec_helper.rb or shared_context.)",
 ].join("\n");
 
-function buildActivePrompt(
-  base: string,
-  phase: Phase,
-  testCommand: string,
-): string {
+function buildActivePrompt(base: string, phase: Phase, testCommand: string, testCwd?: string): string {
+  const cwdNote = testCwd ? `\nTest directory: ${testCwd}` : "";
   return (
     base +
-    `\n\n[TDD MODE \u2014 ${phase.toUpperCase()} PHASE]\n${PHASE_GUIDANCE[phase]}\nTest command: ${testCommand}\n\n${TEST_ORG_TEXT}`
+    `\n\n[TDD MODE \u2014 ${phase.toUpperCase()} PHASE]\n` +
+    `${PHASE_GUIDANCE[phase]}\n` +
+    `Test command: ${testCommand}${cwdNote}\n\n${TEST_ORG_TEXT}`
   );
 }
 
@@ -218,9 +258,7 @@ async function fileExists(cwd: string, name: string): Promise<boolean> {
 
 async function hasNpmTestScript(cwd: string): Promise<boolean> {
   try {
-    const pkg = JSON.parse(
-      await fs.promises.readFile(path.join(cwd, "package.json"), "utf-8"),
-    );
+    const pkg = JSON.parse(await fs.promises.readFile(path.join(cwd, "package.json"), "utf-8"));
     return Boolean(pkg.scripts?.test);
   } catch {
     return false;
@@ -229,10 +267,7 @@ async function hasNpmTestScript(cwd: string): Promise<boolean> {
 
 async function makefileHasTestTarget(cwd: string): Promise<boolean> {
   try {
-    const contents = await fs.promises.readFile(
-      path.join(cwd, "Makefile"),
-      "utf-8",
-    );
+    const contents = await fs.promises.readFile(path.join(cwd, "Makefile"), "utf-8");
     return /^test\s*:/m.test(contents);
   } catch {
     return false;
@@ -248,11 +283,70 @@ async function inferTestCommand(cwd: string): Promise<string | undefined> {
   return undefined;
 }
 
+// -- Monorepo / multi-directory discovery --------------------------------------
+
+interface TestProject {
+  dir: string;
+  name: string;
+  command: string;
+}
+
+async function scanChildDirectories(cwd: string): Promise<TestProject[]> {
+  const entries = await fs.promises.readdir(cwd, { withFileTypes: true });
+  const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith("."));
+  const results: TestProject[] = [];
+  for (const entry of dirs) {
+    const dir = path.join(cwd, entry.name);
+    const cmd = await inferTestCommand(dir);
+    if (cmd) results.push({ dir, name: entry.name, command: cmd });
+  }
+  return results;
+}
+
+function buildSelectOptions(projects: TestProject[]): string[] {
+  return [...projects.map((p) => `${p.name} \u2014 ${p.command}`), "Custom command..."];
+}
+
+interface TestConfig {
+  command: string;
+  cwd: string;
+}
+
+async function resolveTestConfig(
+  rootCwd: string,
+  ui: { input: ExtensionContext["ui"]["input"]; select: ExtensionContext["ui"]["select"] } | undefined,
+): Promise<TestConfig | undefined> {
+  const rootCmd = await inferTestCommand(rootCwd);
+  if (rootCmd) return { command: rootCmd, cwd: rootCwd };
+
+  const projects = await scanChildDirectories(rootCwd);
+
+  if (projects.length === 1) {
+    return { command: projects[0].command, cwd: projects[0].dir };
+  }
+
+  if (projects.length > 1 && ui) {
+    const options = buildSelectOptions(projects);
+    const choice = await ui.select("Select test project", options);
+    if (!choice) return undefined;
+    const project = projects.find((p) => choice.startsWith(p.name));
+    if (project) return { command: project.command, cwd: project.dir };
+  }
+
+  if (ui) {
+    const manual = await ui.input("Test command", "npm test");
+    if (manual) return { command: manual, cwd: rootCwd };
+  }
+
+  return undefined;
+}
+
 // -- Extension ----------------------------------------------------------------
 
 export default function tddExtension(pi: ExtensionAPI) {
   let phase: Phase = "off";
   let testCommand: string | undefined;
+  let testCwd: string | undefined;
   let testFileWritten = false;
   let lastSummary: TestSummary | undefined;
   let cycleCount = 0;
@@ -272,11 +366,12 @@ export default function tddExtension(pi: ExtensionAPI) {
       };
     const [cmd, ...args] = testCommand.split(/\s+/);
     const start = Date.now();
-    const { stdout, stderr, code } = await pi.exec(cmd, args);
+    const opts = testCwd ? { cwd: testCwd } : undefined;
+    const { stdout, stderr, code } = await pi.exec(cmd, args, opts);
     const durationMs = Date.now() - start;
     return {
       passed: code === 0,
-      output: (stdout + "\n" + stderr).trim(),
+      output: `${stdout}\n${stderr}`.trim(),
       durationMs,
     };
   }
@@ -289,10 +384,7 @@ export default function tddExtension(pi: ExtensionAPI) {
       cycleCount = 0;
     }
     phase = next;
-    ctx.ui.setStatus(
-      "tdd",
-      phase === "off" ? "" : `TDD: ${phase.toUpperCase()}`,
-    );
+    ctx.ui.setStatus("tdd", phase === "off" ? "" : `TDD: ${phase.toUpperCase()}`);
     updateWidget(ctx);
   }
 
@@ -313,24 +405,24 @@ export default function tddExtension(pi: ExtensionAPI) {
 
   async function enableTdd(ctx: ExtensionContext): Promise<string> {
     if (phase !== "off") return "TDD is already active";
-    testCommand = await inferTestCommand(ctx.cwd);
-    if (!testCommand && ctx.hasUI) {
-      testCommand =
-        (await ctx.ui.input("Test command", "npm test")) || undefined;
-    }
-    if (!testCommand) {
+    const config = await resolveTestConfig(ctx.cwd, ctx.hasUI ? ctx.ui : undefined);
+    if (!config) {
       ctx.ui.notify("TDD requires a test command", "warning");
       return "Could not determine test command";
     }
+    testCommand = config.command;
+    testCwd = config.cwd;
     cycleCount = 1;
     lastSummary = undefined;
     setPhase("specifying", ctx);
-    ctx.ui.notify("TDD on \u2014 write a failing test");
-    return "TDD enabled \u2014 SPECIFYING phase. Write a failing test first.";
+    const label = testCwd !== ctx.cwd ? ` in ${path.basename(testCwd)}` : "";
+    ctx.ui.notify(`TDD on${label} \u2014 write a failing test`);
+    return `TDD enabled \u2014 SPECIFYING phase. Write a failing test first.\nTest command: ${testCommand}${label}`;
   }
 
   function disableTdd(ctx: ExtensionContext): string {
     if (phase === "off") return "TDD is already off";
+    testCwd = undefined;
     setPhase("off", ctx);
     ctx.ui.notify("TDD off");
     return "TDD disabled";
@@ -352,7 +444,9 @@ export default function tddExtension(pi: ExtensionAPI) {
     name: "tdd_start",
     label: "TDD Start",
     description:
-      "Enable TDD mode for feature or bug fix work. Call this before writing code when the task involves new behavior or fixing a bug.",
+      "Enable TDD mode for feature or bug fix work." +
+      " Call this before writing code when the task" +
+      " involves new behavior or fixing a bug.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const msg = await enableTdd(ctx);
@@ -363,8 +457,7 @@ export default function tddExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "tdd_done",
     label: "TDD Done",
-    description:
-      "End TDD mode. Call this when the current feature or bug fix is complete and all tests pass.",
+    description: "End TDD mode. Call this when the current feature or bug fix is complete and all tests pass.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const msg = disableTdd(ctx);
@@ -382,12 +475,10 @@ export default function tddExtension(pi: ExtensionAPI) {
     else if (isToolCallEventType("edit", event)) filePath = event.input.path;
     if (!filePath || !isProductionFile(filePath)) return undefined;
 
-    if (ctx.hasUI)
-      ctx.ui.notify("SPECIFYING: write a failing test first", "warning");
+    if (ctx.hasUI) ctx.ui.notify("SPECIFYING: write a failing test first", "warning");
     return {
       block: true,
-      reason:
-        "TDD SPECIFYING phase: write a failing test before changing production code",
+      reason: "TDD SPECIFYING phase: write a failing test before changing production code",
     };
   });
 
@@ -407,15 +498,11 @@ export default function tddExtension(pi: ExtensionAPI) {
     const { passed, output, durationMs } = await runTests();
 
     lastSummary = parseTestOutput(output);
-    if (!lastSummary.duration)
-      lastSummary.duration = formatDuration(durationMs);
+    if (!lastSummary.duration) lastSummary.duration = formatDuration(durationMs);
     updateWidget(ctx);
 
     const label = `[TDD ${phase.toUpperCase()}] Tests ${passed ? "PASS" : "FAIL"}`;
-    const appended = [
-      ...event.content,
-      { type: "text" as const, text: `\n${label}:\n${output}` },
-    ];
+    const appended = [...event.content, { type: "text" as const, text: `\n${label}:\n${output}` }];
 
     if (phase === "specifying" && !passed) setPhase("implementing", ctx);
     else if (phase === "implementing" && passed) setPhase("refactoring", ctx);
@@ -440,10 +527,8 @@ export default function tddExtension(pi: ExtensionAPI) {
 
     updateWidget(ctx);
 
-    if (phase === "specifying" && testFileWritten && !testPassed)
-      setPhase("implementing", ctx);
-    else if (phase === "implementing" && testPassed)
-      setPhase("refactoring", ctx);
+    if (phase === "specifying" && testFileWritten && !testPassed) setPhase("implementing", ctx);
+    else if (phase === "implementing" && testPassed) setPhase("refactoring", ctx);
   });
 
   // -- REFACTORING -> SPECIFYING on new user turn ---------------------------
@@ -455,10 +540,9 @@ export default function tddExtension(pi: ExtensionAPI) {
   // -- System prompt injection ----------------------------------------------
 
   pi.on("before_agent_start", async (event) => {
-    if (phase === "off")
-      return { systemPrompt: event.systemPrompt + TDD_OFF_PROMPT };
+    if (phase === "off") return { systemPrompt: event.systemPrompt + TDD_OFF_PROMPT };
     return {
-      systemPrompt: buildActivePrompt(event.systemPrompt, phase, testCommand!),
+      systemPrompt: buildActivePrompt(event.systemPrompt, phase, testCommand ?? "", testCwd),
     };
   });
 }
