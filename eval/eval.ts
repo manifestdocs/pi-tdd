@@ -16,7 +16,7 @@ import {
 
 import { type EvalConfig, getStacks, type ModelConfig, type TrialConfig, type VariantConfig } from "./types.js";
 
-const TRIALS_DIR = path.join(import.meta.dirname, "projects");
+const TRIALS_DIR = path.join(import.meta.dirname, "trials");
 const PLUGINS_DIR = path.join(import.meta.dirname, "plugins");
 const RUNS_DIR = path.join(import.meta.dirname, "runs");
 
