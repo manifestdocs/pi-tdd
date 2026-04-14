@@ -41,6 +41,7 @@ export interface ModelConfig {
 export interface SuiteEntry {
   trial: string;
   variant: string;
+  epochs?: number;
 }
 
 export interface EvalConfig {
@@ -54,6 +55,8 @@ export interface EvalConfig {
   execution?: {
     suiteConcurrency?: number;
   };
+  /** Run each trial N times for statistical significance (default 1). */
+  epochs?: number;
   suites?: Record<string, SuiteEntry[]>;
   /** Compatibility alias for older configs. Prefer `suites`. */
   runSets?: Record<string, SuiteEntry[]>;

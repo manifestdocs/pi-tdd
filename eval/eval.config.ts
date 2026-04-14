@@ -1,5 +1,14 @@
 import type { EvalConfig } from "./types.js";
 
+const micro = [
+  { trial: "palindrome-check", variant: "typescript-vitest" },
+  { trial: "email-validator", variant: "typescript-vitest" },
+  { trial: "roman-numerals", variant: "typescript-vitest" },
+  { trial: "csv-parser", variant: "typescript-vitest" },
+  { trial: "binary-search", variant: "typescript-vitest" },
+  { trial: "slug-generator", variant: "typescript-vitest" },
+];
+
 const small = [
   { trial: "stack-calc", variant: "typescript-vitest" },
   { trial: "todo-cli", variant: "typescript-vitest" },
@@ -21,7 +30,9 @@ const config: EvalConfig = {
     inactivityMs: 2 * 60 * 1000,
     judgeMs: 2 * 60 * 1000,
   },
+  // epochs: 3,  // Run each trial N times for statistical significance
   suites: {
+    micro,
     small,
     quick: small,
     rust: [

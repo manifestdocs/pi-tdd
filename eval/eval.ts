@@ -11,10 +11,11 @@ import {
   loadPreviousSuiteReport,
   loadSuiteReport,
   parseSessionLines,
+  printAggregatedSummary,
+  printSuiteComparison,
   printSummary,
   runEval,
   runJudge,
-  type SuiteComparison,
   scoreSession,
   updateRunIndex,
   updateSuiteIndex,
@@ -48,6 +49,8 @@ interface RunTrialOpts {
   worker?: ModelConfig;
   judge?: ModelConfig;
   timeouts?: EvalConfig["timeouts"];
+  epoch?: number;
+  totalEpochs?: number;
 }
 
 interface RunTrialResult {
@@ -104,10 +107,6 @@ function getConfiguredSuites(config: EvalConfig): Record<string, SuiteEntry[]> {
 
 function buildTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
-function formatDelta(value: number): string {
-  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function getFlag(args: string[], name: string): string | undefined {
@@ -186,7 +185,8 @@ async function runTrial(
   const stackLabel = getStacks(variant)
     .map((stack) => `${stack.language}/${stack.testFramework}`)
     .join(", ");
-  console.log(`Running ${trialName}/${variantName} (${stackLabel})`);
+  const epochLabel = opts.totalEpochs && opts.totalEpochs > 1 ? ` [epoch ${opts.epoch}/${opts.totalEpochs}]` : "";
+  console.log(`Running ${trialName}/${variantName} (${stackLabel})${epochLabel}`);
   console.log(`  Plugin: ${plugin.name}`);
   console.log(`  Work dir: ${workDir}`);
   if (suiteContext) console.log(`  Suite: ${suiteContext.suite} (${suiteContext.suiteRunId})`);
@@ -221,6 +221,7 @@ async function runTrial(
         trial: trialName,
         variant: variantName,
         ...(suiteContext ?? {}),
+        ...(opts.epoch ? { epoch: opts.epoch, totalEpochs: opts.totalEpochs } : {}),
       },
     },
   });
@@ -296,6 +297,7 @@ async function runTrial(
       durationMs: session.endTime - session.startTime,
       status: result.status,
       ...(suiteContext ?? {}),
+      ...(opts.epoch ? { epoch: opts.epoch, totalEpochs: opts.totalEpochs } : {}),
     },
     scores,
     ...(judgeResult ? { judgeResult } : {}),
@@ -312,17 +314,46 @@ async function runTrial(
 
 async function runSuite(suiteName: string, entries: SuiteEntry[], opts: RunTrialOpts, concurrency: number) {
   const suiteRunId = buildTimestamp();
-  const reports = new Array<{ report: EvalReport; runDir: string }>(entries.length);
+  const globalEpochs = evalConfig.epochs ?? 1;
+  const allReports: Array<{ report: EvalReport; runDir: string }> = [];
+  let maxEpochs = 1;
 
-  await runWithConcurrency(entries, concurrency, async (entry, index) => {
-    const result = await runTrial(entry.trial, entry.variant, opts, { suite: suiteName, suiteRunId });
-    reports[index] = {
-      report: result.report,
-      runDir: path.relative(RUNS_DIR, result.runDir),
-    };
-  });
+  for (const entry of entries) {
+    const epochs = entry.epochs ?? globalEpochs;
+    if (epochs > maxEpochs) maxEpochs = epochs;
 
-  const suiteReport = createSuiteReport(suiteName, suiteRunId, reports);
+    // Run each epoch; within an epoch, respect concurrency for parallelism
+    for (let e = 1; e <= epochs; e++) {
+      const epochOpts: RunTrialOpts = {
+        ...opts,
+        ...(epochs > 1 ? { epoch: e, totalEpochs: epochs } : {}),
+      };
+      const result = await runTrial(entry.trial, entry.variant, epochOpts, { suite: suiteName, suiteRunId });
+      allReports.push({
+        report: result.report,
+        runDir: path.relative(RUNS_DIR, result.runDir),
+      });
+    }
+  }
+
+  // Compare with previous suite run before writing (so comparison gets embedded)
+  let comparison;
+  const previous = loadPreviousSuiteReport(RUNS_DIR, suiteName, suiteRunId);
+
+  const suiteReport = createSuiteReport(
+    suiteName, suiteRunId, allReports,
+    new Date().toISOString(),
+    maxEpochs > 1 ? maxEpochs : undefined,
+  );
+
+  if (previous) {
+    comparison = compareSuiteReports(
+      suiteReport, previous,
+      { threshold: evalConfig.regressions?.threshold },
+    );
+    suiteReport.comparison = comparison;
+  }
+
   writeSuiteReport(suiteReport, RUNS_DIR);
   updateSuiteIndex(RUNS_DIR);
 
@@ -332,45 +363,17 @@ async function runSuite(suiteName: string, entries: SuiteEntry[], opts: RunTrial
   console.log(`  Verify failures: ${suiteReport.summary.verifyFailureCount}`);
   console.log(`  Hard failures: ${suiteReport.summary.hardFailureCount}`);
   console.log(`  Average overall: ${suiteReport.summary.averageOverall}/100\n`);
-}
 
-function printComparison(comparison: SuiteComparison) {
-  console.log(`Suite ${comparison.suite}`);
-  console.log(`  Current: ${comparison.currentSuiteRunId}`);
-  console.log(`  Baseline: ${comparison.baselineSuiteRunId}`);
-  console.log(
-    `  Average overall: ${comparison.currentAverageOverall}/100 (${formatDelta(comparison.averageDelta)} vs ${comparison.baselineAverageOverall}/100)`,
-  );
-
-  const aggregateRegression =
-    comparison.baselineAverageOverall - comparison.currentAverageOverall > comparison.threshold;
-  const aggregateImprovement = comparison.averageDelta > comparison.threshold;
-  if (aggregateRegression) {
-    console.log(`  Suite regression: average overall dropped by ${Math.abs(comparison.averageDelta)} points`);
-  } else if (aggregateImprovement) {
-    console.log(`  Suite improvement: average overall improved by ${comparison.averageDelta} points`);
-  }
-
-  const regressions = comparison.entries.filter((entry) => entry.regression);
-  if (regressions.length === 0) {
-    console.log("  No regressions detected.");
-  } else {
-    console.log("  Regressions:");
-    for (const entry of regressions) {
-      for (const finding of entry.findings) {
-        console.log(`    - ${entry.trial}/${entry.variant}: ${finding}`);
-      }
+  if (suiteReport.aggregated) {
+    console.log("--- Aggregated Results ---");
+    for (const agg of suiteReport.aggregated) {
+      printAggregatedSummary(agg);
     }
   }
 
-  const otherChanges = comparison.entries.filter((entry) => !entry.regression && entry.findings.length > 0);
-  if (otherChanges.length > 0) {
-    console.log("  Other changes:");
-    for (const entry of otherChanges) {
-      for (const finding of entry.findings) {
-        console.log(`    - ${entry.trial}/${entry.variant}: ${finding}`);
-      }
-    }
+  if (comparison) {
+    printSuiteComparison(comparison);
+    if (comparison.hasRegression) process.exit(1);
   }
 }
 
@@ -478,7 +481,7 @@ if (command === "list") {
   }
 
   const comparison = compareSuiteReports(current, baseline, { threshold });
-  printComparison(comparison);
+  printSuiteComparison(comparison);
   if (comparison.hasRegression) process.exit(1);
 } else if (command === "run-all") {
   const trials = listTrials();
