@@ -21,6 +21,10 @@ const config: EvalConfig = {
   worker: {
     // Omit to use Pi's default settings from ~/.pi/agent/settings.json
   },
+  models: [
+    { provider: "github-copilot", model: "gemini-3-flash-preview" },
+    { provider: "github-copilot", model: "claude-haiku-4.5" },
+  ],
   judge: {
     provider: "openai-codex",
     model: "gpt-5.4",

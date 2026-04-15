@@ -47,6 +47,7 @@ export interface SuiteEntry {
 export interface EvalConfig {
   worker?: ModelConfig;
   judge?: ModelConfig;
+  models?: ModelConfig[];
   timeouts?: {
     workerMs?: number;
     inactivityMs?: number;
