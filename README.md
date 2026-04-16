@@ -1,6 +1,6 @@
 # pi-tdd
 
-A TDD extension for [Pi](https://pi.dev), the terminal coding agent. It guides Pi to use TDD for feature and bug fixing work, and then enforces a **red-green-refactor** cycle. It has built in parsing for the most popular test frameworks in each of the major programming languages. If you don't have a test framework already set up, it will pick a behavior focused specification library as that's the style I prefer (e.g. Vitest for TypeScript, RSpec for Ruby, etc.).
+pi-tdd is a TDD extension for [Pi](https://pi.dev), the terminal coding agent. It guides Pi to use TDD for feature and bug-fix work and enforces a **red-green-refactor** cycle. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
 
 ---
 

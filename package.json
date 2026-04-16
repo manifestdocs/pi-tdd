@@ -1,7 +1,7 @@
 {
   "name": "pi-tdd",
-  "version": "0.1.0",
-  "description": "TDD extension for Pi -- enforces red-green-refactor sequencing",
+  "version": "1.0.0",
+  "description": "pi-tdd is a TDD extension for Pi that guides feature and bug-fix work through a red-green-refactor cycle.",
   "type": "module",
   "pi": {
     "extensions": [
@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/manifestdocs/pi-tdd.git"
+    "url": "git+https://github.com/kreek/pi-tdd.git"
   },
   "author": "Alastair Dawson",
   "devDependencies": {
@@ -39,9 +39,17 @@
   "license": "MIT",
   "keywords": [
     "pi-package",
+    "pi-extension",
     "pi",
     "tdd",
-    "extension",
-    "test-driven-development"
+    "test-driven-development",
+    "red-green-refactor",
+    "testing",
+    "agent-workflow",
+    "coding-agent",
+    "vitest",
+    "jest",
+    "pytest",
+    "rspec"
   ]
 }
