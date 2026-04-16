@@ -12,6 +12,7 @@ import { truncateToWidth } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
 import { formatDuration, parseTestOutput, type TestSummary } from "./parsers.js";
+import { detectsShellWritePattern, extractRedirectTargets } from "./shell-detection.js";
 
 type Phase = "off" | "specifying" | "implementing" | "refactoring";
 
@@ -361,7 +362,8 @@ export default function tddExtension(pi: ExtensionAPI) {
   let phase: Phase = "off";
   let testCommand: string | undefined;
   let testCwd: string | undefined;
-  let testFileWritten = false;
+  let testEvidenceObserved = false;
+  let stubAllowed = false;
   let lastSummary: TestSummary | undefined;
   let cycleCount = 0;
 
@@ -378,10 +380,9 @@ export default function tddExtension(pi: ExtensionAPI) {
         output: "No test command configured",
         durationMs: 0,
       };
-    const [cmd, ...args] = testCommand.split(/\s+/);
     const start = Date.now();
     const opts = testCwd ? { cwd: testCwd } : undefined;
-    const { stdout, stderr, code } = await pi.exec(cmd, args, opts);
+    const { stdout, stderr, code } = await pi.exec("sh", ["-c", testCommand], opts);
     const durationMs = Date.now() - start;
     return {
       passed: code === 0,
@@ -392,10 +393,14 @@ export default function tddExtension(pi: ExtensionAPI) {
 
   function setPhase(next: Phase, ctx: ExtensionContext) {
     if (next === "specifying" && phase === "refactoring") cycleCount++;
-    if (next === "specifying") testFileWritten = false;
+    if (next === "specifying") {
+      testEvidenceObserved = false;
+      stubAllowed = false;
+    }
     if (next === "off") {
       lastSummary = undefined;
       cycleCount = 0;
+      stubAllowed = false;
     }
     phase = next;
     ctx.ui.setStatus("tdd", phase === "off" ? "" : `TDD: ${phase.toUpperCase()}`);
@@ -488,6 +493,46 @@ export default function tddExtension(pi: ExtensionAPI) {
     },
   });
 
+  // -- Shared test-result handler -------------------------------------------
+
+  function handleTestResult(
+    passed: boolean,
+    output: string,
+    durationMs: number | undefined,
+    ctx: ExtensionContext,
+  ): { appendText: string } {
+    stubAllowed = false;
+
+    const summary = parseTestOutput(output);
+    if (durationMs != null && !summary.duration) {
+      summary.duration = formatDuration(durationMs);
+    }
+    lastSummary = summary;
+    updateWidget(ctx);
+
+    if (phase === "specifying" && !passed && summary.failed > 0) {
+      testEvidenceObserved = true;
+    }
+
+    const label = `[TDD ${phase.toUpperCase()}] Tests ${passed ? "PASS" : "FAIL"}`;
+    let appendText = `\n${label}:\n${output}`;
+
+    if (phase === "specifying" && !passed && isImportOnlyFailure(output, summary)) {
+      stubAllowed = true;
+      appendText +=
+        "\n\n[TDD HINT] Tests failed due to a missing module, not a failing assertion." +
+        " You may now create a minimal stub (empty class/function with the right exports)" +
+        " so the tests can load and fail on actual behavioral assertions. Stay in SPECIFYING" +
+        " — do not implement business logic yet. The stub allowance will clear after the next test run.";
+    } else if (phase === "specifying" && !passed) {
+      setPhase("implementing", ctx);
+    } else if (phase === "implementing" && passed) {
+      setPhase("refactoring", ctx);
+    }
+
+    return { appendText };
+  }
+
   // -- SPECIFYING phase: gate production code writes ------------------------
 
   pi.on("tool_call", async (event, ctx) => {
@@ -497,6 +542,8 @@ export default function tddExtension(pi: ExtensionAPI) {
     if (isToolCallEventType("write", event)) filePath = event.input.path;
     else if (isToolCallEventType("edit", event)) filePath = event.input.path;
     if (!filePath || !isProductionFile(filePath)) return undefined;
+
+    if (stubAllowed) return undefined;
 
     if (ctx.hasUI) ctx.ui.notify("SPECIFYING: write a failing test first", "warning");
     return {
@@ -514,32 +561,39 @@ export default function tddExtension(pi: ExtensionAPI) {
     const filePath = getStringInput(event.input, "path");
     if (!filePath) return;
 
-    if (isTestFile(filePath)) testFileWritten = true;
+    if (isTestFile(filePath)) testEvidenceObserved = true;
     if (!shouldRunTests(phase, filePath)) return;
-    if (phase === "specifying" && !testFileWritten) return;
+    if (phase === "specifying" && !testEvidenceObserved) return;
 
     const { passed, output, durationMs } = await runTests();
-
-    lastSummary = parseTestOutput(output);
-    if (!lastSummary.duration) lastSummary.duration = formatDuration(durationMs);
-    updateWidget(ctx);
-
-    const label = `[TDD ${phase.toUpperCase()}] Tests ${passed ? "PASS" : "FAIL"}`;
-    let appendText = `\n${label}:\n${output}`;
-
-    if (phase === "specifying" && !passed && isImportOnlyFailure(output, lastSummary)) {
-      appendText +=
-        "\n\n[TDD HINT] Tests failed due to a missing module, not a failing assertion." +
-        " Create a minimal stub (empty class/function with the right exports) so the" +
-        " tests can load and fail on actual behavioral assertions. Stay in SPECIFYING" +
-        " — do not implement business logic yet.";
-    } else if (phase === "specifying" && !passed) {
-      setPhase("implementing", ctx);
-    } else if (phase === "implementing" && passed) {
-      setPhase("refactoring", ctx);
-    }
+    const { appendText } = handleTestResult(passed, output, durationMs, ctx);
 
     const appended = [...event.content, { type: "text" as const, text: appendText }];
+    return { content: appended };
+  });
+
+  // -- Warn on shell-based production writes during SPECIFYING --------------
+
+  pi.on("tool_result", async (event, ctx) => {
+    if (phase !== "specifying" || event.toolName !== "bash") return;
+
+    const command = getStringInput(event.input, "command");
+    if (!command) return;
+    if (testCommand && command.includes(testCommand)) return;
+
+    if (!detectsShellWritePattern(command)) return;
+
+    const targets = extractRedirectTargets(command);
+    if (targets.length > 0 && !targets.some((f) => isProductionFile(f))) return;
+
+    const warning =
+      "\n\n[TDD WARNING] This command appears to write to a production file during SPECIFYING." +
+      " TDD best practice: write a failing test before modifying production code." +
+      " This is a warning only — the command was not blocked.";
+
+    if (ctx.hasUI) ctx.ui.notify("SPECIFYING: possible production write via shell", "warning");
+
+    const appended = [...event.content, { type: "text" as const, text: warning }];
     return { content: appended };
   });
 
@@ -551,17 +605,18 @@ export default function tddExtension(pi: ExtensionAPI) {
     const command = getStringInput(event.input, "command");
     if (!command || !testCommand || !command.includes(testCommand)) return;
 
+    testEvidenceObserved = true;
+
     const bashOutput = event.content
       .filter((c): c is { type: "text"; text: string } => c.type === "text")
       .map((c) => c.text)
       .join("\n");
-    lastSummary = parseTestOutput(bashOutput);
+
     const testPassed = !event.isError;
+    const { appendText } = handleTestResult(testPassed, bashOutput, undefined, ctx);
 
-    updateWidget(ctx);
-
-    if (phase === "specifying" && testFileWritten && !testPassed) setPhase("implementing", ctx);
-    else if (phase === "implementing" && testPassed) setPhase("refactoring", ctx);
+    const appended = [...event.content, { type: "text" as const, text: appendText }];
+    return { content: appended };
   });
 
   // -- REFACTORING -> SPECIFYING on new user turn ---------------------------
