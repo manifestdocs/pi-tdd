@@ -2,6 +2,8 @@
 
 pi-tdd is a TDD extension for [Pi](https://pi.dev), the terminal coding agent. It guides Pi to use TDD for feature and bug-fix work and enforces a **red-green-refactor** cycle. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
 
+<video src="assets/pi-tdd-demo.mp4" autoplay loop muted playsinline controls></video>
+
 ---
 
 **Table of contents**
