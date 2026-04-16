@@ -4,9 +4,9 @@
   "description": "Eval suite for pi-tdd extension",
   "type": "module",
   "scripts": {
-    "eval": "tsx eval.ts",
+    "eval": "bun eval.ts",
     "test": "vitest run",
-    "view": "tsx -e \"import('pi-do-eval').then(m => new m.EvalServer('.', 4242).start())\""
+    "view": "bun eval.ts view"
   },
   "dependencies": {
     "pi-do-eval": "file:../../pi-do-eval"

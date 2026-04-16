@@ -408,6 +408,7 @@ function printUsage() {
   console.log("  eval run-all                                     Run all trials and variants");
   console.log("  eval bench <suite>                               Compare latest runs per model");
   console.log("  eval bench <suite> --model X --model Y           Run models then compare");
+  console.log("  eval view                                        Start the eval viewer with launcher");
   console.log("");
   console.log("Options:");
   console.log("  --no-judge                  Skip LLM judge (deterministic only)");
@@ -617,6 +618,45 @@ if (command === "list") {
   printBenchComparison(benchReport);
   writeBenchReport(benchReport, RUNS_DIR);
   updateBenchIndex(RUNS_DIR);
+} else if (command === "view") {
+  const { setServerConfig } = await import("pi-do-eval/server/config");
+  const launcherTrials = await Promise.all(listTrials().map(async (t) => {
+    const config = await loadConfig(t);
+    return { name: t, description: config.description, variants: Object.keys(config.variants) };
+  }));
+  setServerConfig(
+    {
+      trials: launcherTrials,
+      suites: Object.fromEntries(
+        Object.entries(configuredSuites).map(([k, v]) => [k, v.map(e => ({ trial: e.trial, variant: e.variant }))])
+      ),
+      models: evalConfig.models ?? [],
+      defaultWorker: evalConfig.worker,
+      judge: evalConfig.judge,
+      timeouts: evalConfig.timeouts,
+      epochs: evalConfig.epochs,
+      budgets: evalConfig.budgets,
+      regressionThreshold: evalConfig.regressions?.threshold,
+    },
+    "bun eval.ts",
+    process.cwd(),
+  );
+  const port = process.env.EVAL_PORT || "4242";
+  // Resolve package root: export points to src/lib/eval/index.ts, go up 3 dirs
+  const piDoEvalDir = path.resolve(import.meta.resolve("pi-do-eval").replace("file://", ""), "../../..");
+  const { spawn } = await import("node:child_process");
+  // Build the SvelteKit app if not already built
+  const buildDir = path.join(piDoEvalDir, "build");
+  if (!fs.existsSync(buildDir)) {
+    const build = spawn("bun", ["run", "build"], { cwd: piDoEvalDir, stdio: "inherit", env: { ...process.env } });
+    await new Promise<void>((resolve) => build.on("exit", resolve));
+  }
+  const preview = spawn("bun", ["run", "preview", "--", "--port", port, "--host", "127.0.0.1"], {
+    cwd: piDoEvalDir,
+    stdio: "inherit",
+    env: { ...process.env },
+  });
+  preview.on("exit", (code) => process.exit(code ?? 0));
 } else {
   printUsage();
 }
