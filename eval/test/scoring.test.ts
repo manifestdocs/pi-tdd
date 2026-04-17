@@ -115,6 +115,16 @@ describe("scoreTddCompliance", () => {
     expect(score).toBe(13);
   });
 
+  it("does not penalize a production write that lands exactly on the specifying exit boundary", () => {
+    const session = makeSession({
+      pluginEvents: [phaseChange(1000, "off", "specifying"), phaseChange(5000, "specifying", "implementing")],
+      fileWrites: [{ timestamp: 5000, path: "calc.ts", tool: "write", labels: ["production"] }],
+    });
+    const { score } = scoreTddCompliance(session, 3);
+    // Boundary write should be treated as implementing, not specifying.
+    expect(score).toBe(23);
+  });
+
   it("caps specifying penalty at 0", () => {
     const writes = Array.from({ length: 10 }, (_, i) => ({
       timestamp: 2000 + i * 100,
@@ -334,6 +344,25 @@ describe("configure", () => {
 
     // Reset
     configure({ taskCount: 3 });
+  });
+});
+
+describe("classifyFile", () => {
+  it("treats runner configs as config rather than production", () => {
+    expect(plugin.classifyFile?.("vitest.config.ts")).toBe("config");
+    expect(plugin.classifyFile?.("frontend/jest.config.cjs")).toBe("config");
+    expect(plugin.classifyFile?.("frontend\\jest.config.cjs")).toBe("config");
+    expect(plugin.classifyFile?.("Gemfile")).toBe("config");
+    expect(plugin.classifyFile?.("mix.exs")).toBe("config");
+    expect(plugin.classifyFile?.("pom.xml")).toBe("config");
+    expect(plugin.classifyFile?.("build.gradle")).toBe("config");
+    expect(plugin.classifyFile?.("build.gradle.kts")).toBe("config");
+    expect(plugin.classifyFile?.("phpunit.xml")).toBe("config");
+    expect(plugin.classifyFile?.("phpunit.xml.dist")).toBe("config");
+    expect(plugin.classifyFile?.("setup.py")).toBe("config");
+    expect(plugin.classifyFile?.("backend\\project.csproj")).toBe("config");
+    expect(plugin.classifyFile?.("backend\\solution.sln")).toBe("config");
+    expect(plugin.classifyFile?.("src/app.config.ts")).toBe("production");
   });
 });
 

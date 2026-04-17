@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// Mirror the regex from src/index.ts — tests verify the pattern covers all conventions
-const TEST_FILE_RE = /\.test\.|\.spec\.|_test\.|_spec\.|(?:^|\/)__tests__\/|(?:^|\/)tests?\/|(?:^|\/|\\)test_[^/\\]*\./;
-
-function isTestFile(filePath: string): boolean {
-  return TEST_FILE_RE.test(filePath);
-}
+import { isConfigFile, isTestFile } from "../src/file-classification.js";
 
 describe("isTestFile", () => {
   describe("standard infix patterns", () => {
@@ -19,8 +14,10 @@ describe("isTestFile", () => {
       "tests/todo_cli.rs",
       "__tests__/calc.js",
       "src/__tests__/helper.ts",
+      "src\\__tests__\\helper.ts",
       "test/nested/deep.ts",
       "tests/integration/api.rs",
+      "tests\\integration\\api.rs",
     ])("matches %s", (p) => expect(isTestFile(p)).toBe(true));
   });
 
@@ -40,4 +37,31 @@ describe("isTestFile", () => {
       "src/latest.go",
     ])("does not match %s", (p) => expect(isTestFile(p)).toBe(false));
   });
+});
+
+describe("isConfigFile", () => {
+  it.each([
+    "vitest.config.ts",
+    "vite.config.mts",
+    "app/jest.config.cjs",
+    "frontend/playwright.config.ts",
+    "frontend\\playwright.config.ts",
+    "eslint.config.js",
+    "package.json",
+    "tsconfig.json",
+    "Cargo.lock",
+    "Gemfile",
+    "mix.exs",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "phpunit.xml",
+    "phpunit.xml.dist",
+    "setup.py",
+    "backend\\project.csproj",
+    "backend\\solution.sln",
+  ])("matches %s", (p) => expect(isConfigFile(p)).toBe(true));
+
+  it.each(["src/index.ts", "src/app.config.ts", "src/vitest.helpers.ts"])("does not match %s", (p) =>
+    expect(isConfigFile(p)).toBe(false));
 });

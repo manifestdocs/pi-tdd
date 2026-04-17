@@ -11,53 +11,14 @@ import { type ExtensionAPI, type ExtensionContext, isToolCallEventType } from "@
 import { truncateToWidth } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
+import { isConfigFile, isProductionFile, isTestFile } from "./file-classification.js";
 import { formatDuration, parseTestOutput, type TestSummary } from "./parsers.js";
 import { buildSystemPrompt, type Phase } from "./prompt.js";
 import { detectsShellWritePattern, extractRedirectTargets } from "./shell-detection.js";
 
 // -- File classification ------------------------------------------------------
-
-const TEST_FILE_RE = /\.test\.|\.spec\.|_test\.|_spec\.|(?:^|\/)__tests__\/|(?:^|\/)tests?\/|(?:^|\/|\\)test_[^/\\]*\./;
-const CONFIG_FILE_RE = new RegExp(
-  [
-    "package\\.json$",
-    "package-lock\\.json$",
-    "yarn\\.lock$",
-    "pnpm-lock\\.yaml$",
-    "tsconfig.*\\.json$",
-    "\\.eslintrc",
-    "\\.prettierrc",
-    "\\.gitignore$",
-    "\\.env",
-    "Cargo\\.toml$",
-    "Cargo\\.lock$",
-    "go\\.mod$",
-    "go\\.sum$",
-    "pyproject\\.toml$",
-    "requirements.*\\.txt$",
-    "Makefile$",
-    "Dockerfile",
-    "\\.ya?ml$",
-    "\\.toml$",
-    "\\.ini$",
-    "\\.cfg$",
-    "\\.md$",
-  ].join("|"),
-);
 const IMPORT_ERROR_RE =
   /Cannot find module|Module not found|ModuleNotFoundError|ImportError|unresolved import|cannot find package|no required module|Could not resolve/i;
-
-function isTestFile(filePath: string): boolean {
-  return TEST_FILE_RE.test(filePath);
-}
-
-function isConfigFile(filePath: string): boolean {
-  return CONFIG_FILE_RE.test(filePath);
-}
-
-function isProductionFile(filePath: string): boolean {
-  return !isTestFile(filePath) && !isConfigFile(filePath);
-}
 
 function isImportOnlyFailure(output: string, summary: TestSummary): boolean {
   const noTestsRan = summary.passed === 0 && summary.failed === 0 && summary.tests.length === 0;

@@ -3,11 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { EvalPlugin, EvalSession, PluginEvent, VerifyResult } from "pi-do-eval";
 
+import { isConfigFile, isTestFile } from "../../src/file-classification.js";
+
 const PI_TDD_PATH = path.resolve(import.meta.dirname, "../../src/index.ts");
 
-const TEST_FILE_RE = /\.test\.|\.spec\.|_test\.|_spec\.|(?:^|\/)__tests__\/|(?:^|\/)tests?\/|(?:^|\/|\\)test_[^/\\]*\./;
-const CONFIG_FILE_RE =
-  /package\.json$|tsconfig|\.eslintrc|\.prettierrc|\.gitignore$|\.env|Cargo\.toml$|go\.mod$|go\.sum$|pyproject\.toml$|Makefile$|Dockerfile|\.ya?ml$|\.toml$|\.ini$|\.cfg$|\.md$/;
 const SOURCE_RE = /\.(ts|js|tsx|jsx|py|rb|rs|go|c|ex|exs|java|kt|php)$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", "target", "vendor", "__pycache__", "dist", ".next"]);
 
@@ -67,7 +66,7 @@ export function scoreTddCompliance(session: EvalSession, taskCount: number): { s
     }
   }
   const specProdWrites = prodWrites.filter((f) =>
-    specRanges.some((r) => f.timestamp >= r.start && f.timestamp <= r.end),
+    specRanges.some((r) => f.timestamp >= r.start && f.timestamp < r.end),
   ).length;
   if (specProdWrites === 0) score += 20;
   else score += Math.max(0, 20 - specProdWrites * 5);
@@ -212,7 +211,7 @@ function collectSourceFiles(dir: string): { testFiles: string[]; prodFiles: stri
       if (entry.isDirectory()) walk(full);
       else if (SOURCE_RE.test(entry.name)) {
         const rel = path.relative(dir, full);
-        if (TEST_FILE_RE.test(rel)) testFiles.push(rel);
+        if (isTestFile(rel)) testFiles.push(rel);
         else prodFiles.push(rel);
       }
     }
@@ -246,8 +245,8 @@ const piTddPlugin: EvalPlugin = {
   extensionPath: PI_TDD_PATH,
 
   classifyFile(filePath) {
-    if (TEST_FILE_RE.test(filePath)) return "test";
-    if (CONFIG_FILE_RE.test(filePath)) return "config";
+    if (isTestFile(filePath)) return "test";
+    if (isConfigFile(filePath)) return "config";
     return "production";
   },
 
@@ -288,7 +287,7 @@ const piTddPlugin: EvalPlugin = {
 
   verify(workDir) {
     const commands = detectTestCommands(workDir);
-    const testFileCount = countFiles(workDir, (f) => TEST_FILE_RE.test(f));
+    const testFileCount = countFiles(workDir, (f) => isTestFile(f));
     const allSrc = countFiles(workDir, (f) => SOURCE_RE.test(f));
 
     if (commands.length === 0) {
