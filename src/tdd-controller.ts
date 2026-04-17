@@ -1,14 +1,23 @@
 import * as path from "node:path";
 import type { TextContent } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext, ToolResultEvent } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext, ToolResultEvent } from "@mariozechner/pi-coding-agent";
 
 import { isProductionFile, isTestFile } from "./file-classification.js";
-import type { TestSummary } from "./parsers.js";
+import { formatDuration, type TestSummary } from "./parsers.js";
 import { buildSystemPrompt, type Phase } from "./prompt.js";
 import { detectsShellWritePattern, extractRedirectTargets } from "./shell-detection.js";
 import { evaluateTestResult, getStringInput, shouldRunTests } from "./tdd-state.js";
 import { renderWidget } from "./tdd-widget.js";
 import { resolveTestConfig } from "./test-config.js";
+import {
+  appendTestRunOutput,
+  runTestCommand,
+  TEST_RUN_FAIL_DISMISS_MS,
+  TEST_RUN_MIN_VISIBLE_MS,
+  TEST_RUN_PASS_DISMISS_MS,
+  TEST_RUN_SPINNER_FRAMES,
+  type TestRunSnapshot,
+} from "./test-run-overlay.js";
 
 interface ToolCallMutation {
   block?: boolean;
@@ -31,16 +40,21 @@ function joinTextContent(content: ToolResultEvent["content"]): string {
     .join("\n");
 }
 
-export function createTddController(pi: ExtensionAPI) {
+export function createTddController() {
+  let activeTestRun: TestRunSnapshot | undefined;
+  let activeTestRunShownAt = 0;
+  let activeTestRunDismissTimer: ReturnType<typeof setTimeout> | undefined;
+  let activeTestRunSpinnerTimer: ReturnType<typeof setInterval> | undefined;
   let cycleCount = 0;
   let lastSummary: TestSummary | undefined;
+  let lastWidgetCtx: ExtensionContext | undefined;
   let phase: Phase = "off";
   let stubAllowed = false;
   let testCommand: string | undefined;
   let testCwd: string | undefined;
   let testEvidenceObserved = false;
 
-  async function runTests(): Promise<{
+  async function runTests(ctx: ExtensionContext): Promise<{
     durationMs: number;
     output: string;
     passed: boolean;
@@ -53,19 +67,17 @@ export function createTddController(pi: ExtensionAPI) {
       };
     }
 
-    const start = Date.now();
-    const opts = testCwd ? { cwd: testCwd } : undefined;
-    const { code, stderr, stdout } = await pi.exec("sh", ["-c", testCommand], opts);
+    const cwdLabel = testCwd && testCwd !== ctx.cwd ? path.basename(testCwd) : undefined;
+    beginActiveTestRun(testCommand, cwdLabel, ctx);
 
-    return {
-      durationMs: Date.now() - start,
-      output: `${stdout}\n${stderr}`.trim(),
-      passed: code === 0,
-    };
+    const result = await runTestCommand(testCommand, testCwd, (chunk) => appendActiveTestRunOutput(chunk, ctx));
+    finishActiveTestRun(result.passed, result.durationMs, ctx);
+    return result;
   }
 
   function updateWidget(ctx: ExtensionContext) {
     if (!ctx.hasUI) return;
+    lastWidgetCtx = ctx;
 
     if (phase === "off") {
       ctx.ui.setWidget("tdd", undefined);
@@ -74,8 +86,81 @@ export function createTddController(pi: ExtensionAPI) {
 
     ctx.ui.setWidget("tdd", (_tui, theme) => ({
       invalidate() {},
-      render: (width: number) => renderWidget({ cycleCount, phase, summary: lastSummary }, theme, width),
+      render: (width: number) => renderWidget({ activeTestRun, cycleCount, phase, summary: lastSummary }, theme, width),
     }));
+  }
+
+  function stopActiveTestRunTimers() {
+    if (activeTestRunDismissTimer) {
+      clearTimeout(activeTestRunDismissTimer);
+      activeTestRunDismissTimer = undefined;
+    }
+
+    if (activeTestRunSpinnerTimer) {
+      clearInterval(activeTestRunSpinnerTimer);
+      activeTestRunSpinnerTimer = undefined;
+    }
+  }
+
+  function clearActiveTestRun(ctx?: ExtensionContext) {
+    stopActiveTestRunTimers();
+    activeTestRun = undefined;
+    if (ctx) updateWidget(ctx);
+    else if (lastWidgetCtx) updateWidget(lastWidgetCtx);
+  }
+
+  function beginActiveTestRun(command: string, cwdLabel: string | undefined, ctx: ExtensionContext) {
+    stopActiveTestRunTimers();
+    activeTestRunShownAt = Date.now();
+    activeTestRun = {
+      command,
+      cwdLabel,
+      outputLines: [],
+      running: true,
+      spinnerFrame: TEST_RUN_SPINNER_FRAMES[0],
+    };
+
+    if (ctx.hasUI) {
+      activeTestRunSpinnerTimer = setInterval(() => {
+        if (!activeTestRun?.running || !lastWidgetCtx) return;
+        const currentIndex = TEST_RUN_SPINNER_FRAMES.indexOf(activeTestRun.spinnerFrame);
+        const nextIndex = (currentIndex + 1) % TEST_RUN_SPINNER_FRAMES.length;
+        activeTestRun = { ...activeTestRun, spinnerFrame: TEST_RUN_SPINNER_FRAMES[nextIndex] };
+        updateWidget(lastWidgetCtx);
+      }, 80);
+    }
+
+    updateWidget(ctx);
+  }
+
+  function appendActiveTestRunOutput(chunk: string, ctx: ExtensionContext) {
+    if (!activeTestRun) return;
+    activeTestRun = {
+      ...activeTestRun,
+      outputLines: appendTestRunOutput(activeTestRun.outputLines, chunk),
+    };
+    updateWidget(ctx);
+  }
+
+  function finishActiveTestRun(passed: boolean, durationMs: number, ctx: ExtensionContext) {
+    if (!activeTestRun) return;
+
+    if (activeTestRunSpinnerTimer) {
+      clearInterval(activeTestRunSpinnerTimer);
+      activeTestRunSpinnerTimer = undefined;
+    }
+
+    activeTestRun = {
+      ...activeTestRun,
+      duration: formatDuration(durationMs),
+      passed,
+      running: false,
+    };
+    updateWidget(ctx);
+
+    const visibleDelay = Math.max(0, TEST_RUN_MIN_VISIBLE_MS - (Date.now() - activeTestRunShownAt));
+    const completionDelay = passed ? TEST_RUN_PASS_DISMISS_MS : TEST_RUN_FAIL_DISMISS_MS;
+    activeTestRunDismissTimer = setTimeout(() => clearActiveTestRun(ctx), visibleDelay + completionDelay);
   }
 
   function setPhase(next: Phase, ctx: ExtensionContext) {
@@ -87,6 +172,7 @@ export function createTddController(pi: ExtensionAPI) {
     }
 
     if (next === "off") {
+      clearActiveTestRun(ctx);
       cycleCount = 0;
       lastSummary = undefined;
       stubAllowed = false;
@@ -178,7 +264,7 @@ export function createTddController(pi: ExtensionAPI) {
       if (!shouldRunTests(phase, filePath)) return undefined;
       if (phase === "specifying" && !testEvidenceObserved) return undefined;
 
-      const result = evaluateTestResult({ phase, ...(await runTests()) });
+      const result = evaluateTestResult({ phase, ...(await runTests(ctx)) });
       applyTestResult(result, ctx);
       return appendTextContent(event.content, result.appendText);
     },

@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import { createTddController } from "./tdd-controller.js";
 
 export default function tddExtension(pi: ExtensionAPI) {
-  const controller = createTddController(pi);
+  const controller = createTddController();
 
   pi.registerCommand("tdd", {
     description: "Toggle TDD mode (specifying-implementing-refactoring)",

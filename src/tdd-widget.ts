@@ -1,6 +1,7 @@
 import { truncateToWidth } from "@mariozechner/pi-tui";
 import type { TestSummary } from "./parsers.js";
 import type { Phase } from "./prompt.js";
+import { renderTestRunOverlay, type TestRunSnapshot } from "./test-run-overlay.js";
 
 export interface WidgetTheme {
   bold(s: string): string;
@@ -8,6 +9,7 @@ export interface WidgetTheme {
 }
 
 export interface WidgetSnapshot {
+  activeTestRun: TestRunSnapshot | undefined;
   cycleCount: number;
   phase: Phase;
   summary: TestSummary | undefined;
@@ -29,6 +31,11 @@ export function renderWidget(snap: WidgetSnapshot, theme: WidgetTheme, width: nu
   const maxName = width - 8;
   const phaseLabel = theme.bold(theme.fg(getPhaseColor(snap.phase), snap.phase.toUpperCase()));
   const cycleLabel = snap.cycleCount > 0 ? theme.fg("dim", ` cycle ${snap.cycleCount}`) : "";
+
+  if (snap.activeTestRun) {
+    lines.push(...renderTestRunOverlay(snap.activeTestRun, theme, width));
+    lines.push("");
+  }
 
   lines.push(`${theme.fg("muted", "TDD")} ${phaseLabel}${cycleLabel}`);
 
