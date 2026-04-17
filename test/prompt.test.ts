@@ -7,6 +7,8 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt("BASE", "off");
 
     expect(prompt).toContain("[TDD MODE — OFF]");
+    expect(prompt).toContain("scaffold only the config and dependencies needed to run tests");
+    expect(prompt).toContain("Do not create source stubs or production modules before tdd_start");
     expect(prompt).toContain("Do not use TDD for config changes, documentation, scaffolding, or exploratory tasks.");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");
@@ -35,7 +37,7 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt("BASE", "implementing", "npm test");
 
     expect(prompt).toContain("[TDD MODE — IMPLEMENTING PHASE]");
-    expect(prompt).toContain("Write a MINIMAL and CORRECT production code solution");
+    expect(prompt).toContain("Write the smallest amount of code necessary for the CORRECT solution");
     expect(prompt).toContain("Test command: npm test");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");

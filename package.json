@@ -17,8 +17,10 @@
   ],
   "scripts": {
     "install-ext": "mkdir -p ~/.pi/agent/extensions && ln -sfn \"$(pwd)\" ~/.pi/agent/extensions/pi-tdd && echo 'Installed to ~/.pi/agent/extensions/pi-tdd -- run /reload in Pi to activate'",
+    "install-hooks": "git config core.hooksPath .githooks && echo 'Installed Git hooks from .githooks/'",
     "uninstall-ext": "rm -f ~/.pi/agent/extensions/pi-tdd && echo 'Uninstalled'",
     "lint": "biome check",
+    "lint:staged": "biome check --staged --no-errors-on-unmatched",
     "lint:fix": "biome check --write",
     "test": "vitest run"
   },

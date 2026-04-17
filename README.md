@@ -218,8 +218,11 @@ The widget updates after every test run.
 git clone git@github.com:kreek/pi-tdd.git
 cd pi-tdd
 npm install
+npm run install-hooks # enable the repo-local pre-commit hook
 npm test          # vitest, 46 tests for the parser module
 ```
+
+The pre-commit hook runs `npm run lint:staged`, which executes `biome check --staged`.
 
 Project structure:
 
