@@ -7,8 +7,8 @@
     "extensions": [
       "./src/index.ts"
     ],
-    "video": "https://github.com/kreek/pi-proof/raw/refs/heads/main/assets/pi-tdd-demo.mp4",
-    "image": "https://github.com/kreek/pi-proof/releases/download/v1.0.0/demo.gif"
+    "video": "https://github.com/kreek/pi-proof/raw/refs/heads/main/assets/release/demo.mp4",
+    "image": "https://github.com/kreek/pi-proof/raw/refs/heads/main/assets/release/demo.gif"
   },
   "files": [
     "src",

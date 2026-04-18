@@ -1,8 +1,8 @@
 # pi-proof
 
-pi-proof is a proof-first extension for [Pi](https://pi.dev), the terminal coding agent. It does not force TDD for every task. Instead, it nudges Pi into a **red-green-refactor** cycle when the next change should be specified in a test before implementation, and stays out of the way for documentation, config, scaffolding, and exploratory work. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
+pi-proof is a proof-first extension for [Pi](https://pi.dev), the terminal coding agent. It does not force a proof step for every task. Instead, it nudges Pi into a **red-green-refactor** cycle when the next change should be specified in a test before implementation, and stays out of the way for documentation, config, scaffolding, and exploratory work. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
 
-[![pi-proof demo](https://github.com/kreek/pi-proof/releases/download/v1.0.0/demo.gif)](https://github.com/kreek/pi-proof/releases/download/v1.0.0/demo.mp4)
+[![pi-proof demo](https://github.com/kreek/pi-proof/raw/refs/heads/main/assets/release/demo.gif)](https://github.com/kreek/pi-proof/raw/refs/heads/main/assets/release/demo.mp4)
 
 ---
 
