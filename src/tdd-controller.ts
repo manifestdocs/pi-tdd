@@ -223,9 +223,12 @@ export function createTddController() {
       setPhase("specifying", ctx);
 
       const label = testCwd !== ctx.cwd ? ` in ${path.basename(testCwd)}` : "";
-      ctx.ui.notify(`TDD on${label} \u2014 write a failing test`);
+      ctx.ui.notify(`TDD on${label} \u2014 specify behavior in a test`);
 
-      let message = `TDD enabled \u2014 SPECIFYING phase. Write a failing test first.\nTest command: ${testCommand}${label}`;
+      let message =
+        `TDD enabled \u2014 SPECIFYING phase. ` +
+        `Specify the next behavior in a test before changing production code.\n` +
+        `Test command: ${testCommand}${label}`;
       if (config.command === "pytest") {
         message +=
           '\nHint: add pythonpath = ["."] under [tool.pytest.ini_options] in pyproject.toml so pytest can import your modules.';
@@ -246,10 +249,10 @@ export function createTddController() {
     handleProductionWrite(filePath: string, ctx: ExtensionContext): ToolCallMutation | undefined {
       if (phase !== "specifying" || !isProductionFile(filePath) || stubAllowed) return undefined;
 
-      if (ctx.hasUI) ctx.ui.notify("SPECIFYING: write a failing test first", "warning");
+      if (ctx.hasUI) ctx.ui.notify("SPECIFYING: specify behavior in a test before editing production code", "warning");
       return {
         block: true,
-        reason: "TDD SPECIFYING phase: write a failing test before changing production code",
+        reason: "TDD SPECIFYING phase: specify the next behavior in a test before changing production code",
       };
     },
 
@@ -284,7 +287,7 @@ export function createTddController() {
 
       const warning =
         "\n\n[TDD WARNING] This command appears to write to a production file during SPECIFYING." +
-        " TDD best practice: write a failing test before modifying production code." +
+        " TDD best practice: specify the next behavior in a test before modifying production code." +
         " This is a warning only — the command was not blocked.";
 
       return appendTextContent(event.content, warning);
