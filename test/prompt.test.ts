@@ -7,9 +7,15 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt("BASE", "off");
 
     expect(prompt).toContain("[TDD MODE — OFF]");
+    expect(prompt).toContain("Use it for new features, bug fixes, and changes to business logic.");
+    expect(prompt).toContain("made explicit in tests before changing implementation.");
     expect(prompt).toContain("scaffold only the config and dependencies needed to run tests");
     expect(prompt).toContain("Do not create source stubs or production modules before tdd_start");
     expect(prompt).toContain("Do not use TDD for config changes, documentation, scaffolding, or exploratory tasks.");
+    expect(prompt).not.toContain("feature or bug fix work");
+    expect(prompt).not.toContain("lock behavior");
+    expect(prompt).not.toContain("This is different from the REFACTORING phase inside TDD");
+    expect(prompt).not.toContain("substantial changes to existing behavior");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");
   });

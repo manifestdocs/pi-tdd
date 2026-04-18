@@ -1,6 +1,6 @@
 # pi-tdd
 
-pi-tdd is a TDD extension for [Pi](https://pi.dev), the terminal coding agent. It guides Pi to use TDD for feature and bug-fix work and enforces a **red-green-refactor** cycle. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
+pi-tdd is a TDD extension for [Pi](https://pi.dev), the terminal coding agent. It guides Pi to use TDD for new features, bug fixes, and changes to business logic, and enforces a **red-green-refactor** cycle. It includes built-in parsing for popular test frameworks across the major languages, and can infer a sensible default when a project does not already have a test setup.
 
 [![pi-tdd demo](https://github.com/kreek/pi-tdd/releases/download/v1.0.0/demo.gif)](https://github.com/kreek/pi-tdd/releases/download/v1.0.0/demo.mp4)
 
@@ -68,13 +68,13 @@ If Pi is already running, run `/reload` inside the session to pick up the extens
 
 ### 3. Use it
 
-Just ask the agent to work on a feature or fix a bug. The extension nudges the agent to call `tdd_start` automatically when the task involves new behavior or a bug fix:
+Just ask the agent to work on a new feature, fix a bug, or change business logic. The extension nudges the agent to call `tdd_start` automatically when the intended behavior should be made explicit in tests before changing implementation:
 
 ```
 Fix the off-by-one error in pagination
 ```
 
-The agent enables TDD, writes a failing test, implements the fix, refactors, and calls `tdd_done` when finished.
+The agent enables TDD, writes or updates a test, implements the change, refactors, and calls `tdd_done` when finished.
 
 You can also toggle TDD manually with the slash command:
 
@@ -123,7 +123,7 @@ The extension provides two agent tools and a manual toggle:
 | `tdd_done` | Agent tool: disables TDD mode when work is complete |
 | `/tdd` | Slash command: manual toggle for user override |
 
-When TDD is off, the extension injects a system prompt nudge telling the agent that TDD is available for feature and bug fix work. The agent decides whether the current task warrants it. No keyword heuristics.
+When TDD is off, the extension injects a system prompt nudge telling the agent that TDD is available for new features, bug fixes, and changes to business logic. The agent decides whether the current task warrants it. No keyword heuristics.
 
 When TDD is active, the extension:
 

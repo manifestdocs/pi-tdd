@@ -5,6 +5,9 @@ type ActivePhase = Exclude<Phase, "off">;
 const TDD_OFF_PROMPT = [
   "[TDD MODE — OFF]",
   "TDD mode enforces test-driven development (specifying → implementing → refactoring). " +
+    "Use it for new features, bug fixes, and changes to business logic. " +
+    "This includes changing existing behavior when the intended result should be made " +
+    "explicit in tests before changing implementation. " +
     "Before enabling TDD: scaffold only the config and dependencies needed to run tests " +
     "— create package manifests and runner config files, install the test framework, " +
     "and ensure the test command works (even if there are no tests yet). " +

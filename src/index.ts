@@ -18,9 +18,9 @@ export default function tddExtension(pi: ExtensionAPI) {
     name: "tdd_start",
     label: "TDD Start",
     description:
-      "Enable TDD mode for feature or bug fix work." +
-      " Call this before writing code when the task" +
-      " involves new behavior or fixing a bug.",
+      "Enable TDD mode for new features, bug fixes, or changes to business logic." +
+      " Call this before writing code when the intended behavior should be made explicit" +
+      " in tests before changing implementation.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const msg = await controller.enable(ctx);
@@ -31,7 +31,9 @@ export default function tddExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "tdd_done",
     label: "TDD Done",
-    description: "End TDD mode. Call this when the current feature or bug fix is complete and all tests pass.",
+    description:
+      "End TDD mode. Call this when the current feature, bug fix, or business-logic change is complete" +
+      " and all tests pass.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const msg = controller.disable(ctx);
