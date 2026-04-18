@@ -17,6 +17,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("This is different from the REFACTORING phase inside TDD");
     expect(prompt).not.toContain("substantial changes to existing behavior");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
+    expect(prompt).not.toContain("TEST DOUBLES:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");
   });
 
@@ -27,16 +28,20 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Test command: npm test");
     expect(prompt).toContain("Test directory: /repo/app");
     expect(prompt).toContain("WHAT NOT TO TEST:");
+    expect(prompt).toContain("TEST DOUBLES:");
     expect(prompt).toContain("TEST ORGANIZATION:");
     expect(prompt.match(/WHAT NOT TO TEST:/g)).toHaveLength(1);
+    expect(prompt.match(/TEST DOUBLES:/g)).toHaveLength(1);
     expect(prompt.match(/TEST ORGANIZATION:/g)).toHaveLength(1);
 
     const testCommandIndex = prompt.indexOf("Test command: npm test");
     const testScopeIndex = prompt.indexOf("WHAT NOT TO TEST:");
+    const testDoublesIndex = prompt.indexOf("TEST DOUBLES:");
     const testOrgIndex = prompt.indexOf("TEST ORGANIZATION:");
     expect(testCommandIndex).toBeGreaterThan(-1);
     expect(testScopeIndex).toBeGreaterThan(testCommandIndex);
-    expect(testOrgIndex).toBeGreaterThan(testScopeIndex);
+    expect(testDoublesIndex).toBeGreaterThan(testScopeIndex);
+    expect(testOrgIndex).toBeGreaterThan(testDoublesIndex);
   });
 
   it("keeps implementing focused on production code only", () => {
@@ -46,6 +51,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Write the smallest amount of code necessary for the CORRECT solution");
     expect(prompt).toContain("Test command: npm test");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
+    expect(prompt).not.toContain("TEST DOUBLES:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");
   });
 
@@ -56,6 +62,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Restructure code freely but keep all tests passing.");
     expect(prompt).toContain("Test command: npm test");
     expect(prompt).not.toContain("WHAT NOT TO TEST:");
+    expect(prompt).not.toContain("TEST DOUBLES:");
     expect(prompt).not.toContain("TEST ORGANIZATION:");
   });
 });

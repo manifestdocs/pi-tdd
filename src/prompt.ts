@@ -53,6 +53,18 @@ const SPECIFYING_TEST_SCOPE_TEXT = [
     "systems unless that infrastructure itself is the thing being built or fixed.",
 ].join("\n");
 
+const SPECIFYING_TEST_DOUBLES_TEXT = [
+  "TEST DOUBLES:",
+  "- Prefer tests that exercise real production code with minimal mocking.",
+  "- Prefer the lightest test double that keeps the test honest.",
+  "- For business logic, prefer small local fakes/stubs or injected dependencies over " +
+    "broad module-level/framework mocks.",
+  "- Use framework or module mocks mainly at external boundaries such as network, " +
+    "filesystem, time, randomness, process environment, or third-party SDKs.",
+  "- Avoid mocks that replace whole modules when a narrower fake or public-interface " + "smoke check is sufficient.",
+  "- Do not introduce extra indirection solely to satisfy a testing pattern.",
+].join("\n");
+
 const SPECIFYING_TEST_ORG_TEXT = [
   "TEST ORGANIZATION:",
   "- One test file per module or unit under test. Split when a file covers a distinct " + "area of behavior.",
@@ -85,7 +97,7 @@ function buildPhaseSections(phase: ActivePhase, testCommand: string, testCwd?: s
   ];
 
   if (phase === "specifying") {
-    sections.push(SPECIFYING_TEST_SCOPE_TEXT, SPECIFYING_TEST_ORG_TEXT);
+    sections.push(SPECIFYING_TEST_SCOPE_TEXT, SPECIFYING_TEST_DOUBLES_TEXT, SPECIFYING_TEST_ORG_TEXT);
   }
 
   return sections;

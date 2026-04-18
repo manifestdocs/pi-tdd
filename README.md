@@ -93,6 +93,7 @@ You can also toggle TDD manually with the slash command:
 5. Repeat.
 
 The test does not have to be a unit test. Use the cheapest test that can prove the behavior.
+Prefer real code paths with narrow fakes/stubs over broad framework mocks; mock external boundaries sparingly.
 
 ## Why this matters for coding agents
 
