@@ -7,7 +7,13 @@ export const TEST_RUN_MAX_OUTPUT_LINES = 8;
 export const TEST_RUN_MIN_VISIBLE_MS = 300;
 export const TEST_RUN_PASS_DISMISS_MS = 250;
 export const TEST_RUN_FAIL_DISMISS_MS = 700;
-const SHADOW_CHAR = "░";
+const FRAME_LEFT = "│";
+const FRAME_RIGHT = "│";
+const FRAME_TOP_LEFT = "┌";
+const FRAME_TOP_RIGHT = "┐";
+const FRAME_BOTTOM_LEFT = "└";
+const FRAME_BOTTOM_RIGHT = "┘";
+const FRAME_HORIZONTAL = "─";
 
 export interface TestRunTheme {
   bold(s: string): string;
@@ -47,17 +53,21 @@ function buildShellCommand(command: string): { command: string; args: string[] }
 function frameLine(content: string, innerWidth: number, theme: TestRunTheme): string {
   const clipped = truncateToWidth(content, innerWidth);
   const padding = Math.max(0, innerWidth - visibleWidth(clipped));
-  const border = theme.fg("borderMuted", "│");
-  const shadow = theme.fg("dim", SHADOW_CHAR);
-  return `${border} ${clipped}${" ".repeat(padding)} ${border}${shadow}`;
+  const leftBorder = theme.fg("borderMuted", FRAME_LEFT);
+  const rightBorder = theme.fg("borderMuted", FRAME_RIGHT);
+  return `${leftBorder} ${clipped}${" ".repeat(padding)} ${rightBorder}`;
 }
 
 export function renderTestRunOverlay(snap: TestRunSnapshot, theme: TestRunTheme, width: number): string[] {
-  const innerWidth = Math.max(1, width - 5);
-  const panelWidth = innerWidth + 4;
-  const topBorder = theme.fg("borderMuted", `┌${"─".repeat(innerWidth + 2)}┐`);
-  const bottomBorder = `${theme.fg("borderMuted", `└${"─".repeat(innerWidth + 2)}┘`)}${theme.fg("dim", SHADOW_CHAR)}`;
-  const shadowFloor = ` ${theme.fg("dim", SHADOW_CHAR.repeat(panelWidth))}`;
+  const innerWidth = Math.max(1, width - 4);
+  const topBorder = theme.fg(
+    "borderMuted",
+    `${FRAME_TOP_LEFT}${FRAME_HORIZONTAL.repeat(innerWidth + 2)}${FRAME_TOP_RIGHT}`,
+  );
+  const bottomBorder = theme.fg(
+    "borderMuted",
+    `${FRAME_BOTTOM_LEFT}${FRAME_HORIZONTAL.repeat(innerWidth + 2)}${FRAME_BOTTOM_RIGHT}`,
+  );
   const lines = [topBorder];
   const statusColor = snap.running ? "accent" : snap.passed ? "success" : "error";
   const statusLabel = snap.running ? `${snap.spinnerFrame} RUNNING` : snap.passed ? "PASS" : "FAIL";
@@ -94,7 +104,6 @@ export function renderTestRunOverlay(snap: TestRunSnapshot, theme: TestRunTheme,
   }
 
   lines.push(bottomBorder);
-  lines.push(shadowFloor);
   return lines;
 }
 
